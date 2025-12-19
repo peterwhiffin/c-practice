@@ -336,7 +336,7 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 					struct vertex *v = &vertices[num_vertices++];
 					ufbx_vec3 pos = ufbx_get_vertex_vec3(&node_mesh->vertex_position, index);
 					ufbx_vec2 uv = ufbx_get_vertex_vec2(&node_mesh->vertex_uv, index);
-					v->pos.x v->pos.x = pos.x;
+					v->pos.x = pos.x;
 					v->pos.y = pos.y;
 					v->pos.z = pos.z;
 					v->uv.x = uv.x;
