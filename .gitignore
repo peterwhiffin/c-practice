@@ -53,3 +53,11 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+#my stuff
+res/
+lib/
+build/
+
+.clang-format
+.clangd
