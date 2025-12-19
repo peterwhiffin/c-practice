@@ -147,7 +147,7 @@ void write_tokens(struct token *tokens, size_t num_tokens)
 	fclose(f);
 }
 
-void get_mesh_infos(struct resources *res, char *filename)
+void create_mesh_infos(struct resources *res, char *filename)
 {
 	size_t num_mesh_infos = res->num_mesh_infos;
 	size_t num_tokens = 0;

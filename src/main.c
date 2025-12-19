@@ -392,8 +392,8 @@ void load_resources(struct resources *res)
 		res->num_textures++;
 	}
 
-	get_mesh_infos(res, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
-	get_mesh_infos(res, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt");
+	create_mesh_infos(res, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
+	create_mesh_infos(res, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt");
 
 	for (int i = 0; i < model_count; i++) {
 		load_model(res, model_files[i].full_path, &res->meshes[res->num_models]);
