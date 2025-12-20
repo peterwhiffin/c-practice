@@ -2,8 +2,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/types.h>
 #include <time.h>
+#include "cglm/types.h"
 #include "glad/glad.h"
+#include "cglm/struct.h"
 #include "SDL3/SDL.h"
 
 #define SHADER_PATH "../../src/shaders/"
@@ -15,31 +18,33 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef union {
-	struct {
-		float x, y;
-	};
-
-	float data[2];
-} vec2;
-
-typedef union {
-	struct {
-		float x, y, z;
-	};
-
-	float data[3];
-} vec3;
-
 struct vertex {
-	vec3 pos;
-	vec2 uv;
+	vec3s pos;
+	vec3s normal;
+	vec2s uv;
+};
+
+struct transform {
+	vec3s pos;
+	versors rot;
+	vec3s scale;
+	mat4s world_transform;
+};
+
+struct camera {
+	struct transform transform;
+	mat4s proj;
+	mat4s view;
+	mat4s viewProj;
+	float fov;
+	float near;
+	float far;
 };
 
 struct input {
 	const bool *keyStates;
-	vec2 movement;
-	vec2 cursorPosition;
+	vec2s movement;
+	vec2s cursorPosition;
 	float lookX;
 	float lookY;
 	float oldX;
@@ -120,6 +125,8 @@ struct resources {
 struct render_state {
 	float clear_color[4];
 	float clear_depth;
+	float light_active;
+	bool can_switch_light;
 };
 
 struct window {
@@ -129,11 +136,12 @@ struct window {
 };
 
 struct scene {
+	struct camera scene_cam;
 	time_t last_time;
 	float time;
 	float dt;
 	float model_timer;
 	int current_model;
-	vec3 rot;
+	vec3s rot;
 	bool can_switch;
 };

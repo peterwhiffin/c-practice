@@ -1,3 +1,21 @@
+#include "cglm/struct/euler.h"
+#include "cglm/util.h"
+#define CGLM_FORCE_LEFT_HANDED
+// #include "cglm/affine-pre.h"
+// #include "cglm/cam.h"
+// #include "cglm/mat4.h"
+// #include "cglm/quat.h"
+#include "cglm/struct/affine-pre.h"
+#include "cglm/struct/affine.h"
+#include "cglm/struct/cam.h"
+#include "cglm/struct/mat4.h"
+#include "cglm/struct/quat.h"
+#include "cglm/types-struct.h"
+// #include "cglm/types.h"
+// #include "cglm/vec3.h"
+#include <math.h>
+#include <stddef.h>
+#include <stdio.h>
 #define UFBX_REAL_IS_FLOAT
 #include <dirent.h>
 
@@ -146,12 +164,15 @@ void create_vao(struct sub_mesh *sub_mesh, struct vertex *verts, u32 *indices, s
 
 	glEnableVertexArrayAttrib(vao, 0);
 	glEnableVertexArrayAttrib(vao, 1);
+	glEnableVertexArrayAttrib(vao, 2);
 
 	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribFormat(vao, 1, 2, GL_FLOAT, GL_FALSE, offsetof(struct vertex, uv));
+	glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, offsetof(struct vertex, normal));
+	glVertexArrayAttribFormat(vao, 2, 2, GL_FLOAT, GL_FALSE, offsetof(struct vertex, uv));
 
 	glVertexArrayAttribBinding(vao, 0, 0);
 	glVertexArrayAttribBinding(vao, 1, 0);
+	glVertexArrayAttribBinding(vao, 2, 0);
 
 	sub_mesh->ind_count = indices_size / sizeof(u32);
 	sub_mesh->ind_offset = index_offset;
@@ -335,10 +356,14 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 					u32 index = tri_indices[l];
 					struct vertex *v = &vertices[num_vertices++];
 					ufbx_vec3 pos = ufbx_get_vertex_vec3(&node_mesh->vertex_position, index);
+					ufbx_vec3 normal = ufbx_get_vertex_vec3(&node_mesh->vertex_normal, index);
 					ufbx_vec2 uv = ufbx_get_vertex_vec2(&node_mesh->vertex_uv, index);
 					v->pos.x = pos.x;
 					v->pos.y = pos.y;
 					v->pos.z = pos.z;
+					v->normal.x = normal.x;
+					v->normal.y = normal.y;
+					v->normal.z = normal.z;
 					v->uv.x = uv.x;
 					v->uv.y = uv.y;
 				}
@@ -368,7 +393,7 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 
 void load_resources(struct resources *res)
 {
-	char *startDir = "../../res/";
+	char *startDir = "../../res/horror/";
 	struct file_info *model_files = malloc(sizeof(*model_files) * 2048);
 	struct file_info *texture_files = malloc(sizeof(*texture_files) * 2048);
 	size_t model_count = 0;
@@ -388,11 +413,11 @@ void load_resources(struct resources *res)
 		snprintf(tex->filename, 128, "%s", texture_files[i].file_name);
 		snprintf(tex->name, 128, "%s", texture_files[i].name);
 		load_image(texture_files[i].full_path, tex);
-		printf("loaded tex: %s\n", res->textures[res->num_textures].name);
+		// printf("loaded tex: %s\n", res->textures[res->num_textures].name);
 		res->num_textures++;
 	}
 
-	create_mesh_infos(res, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
+	// create_mesh_infos(res, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
 	create_mesh_infos(res, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt");
 
 	for (int i = 0; i < model_count; i++) {
@@ -405,7 +430,7 @@ void load_resources(struct resources *res)
 	free(res->mesh_infos);
 }
 
-void update(struct scene *scene, struct input *input, struct resources *res)
+void update(struct scene *scene, struct input *input, struct resources *res, struct render_state *render_state)
 {
 	float time = SDL_GetTicks() / 1000.0f;
 	scene->dt = time - scene->time;
@@ -440,13 +465,63 @@ void update(struct scene *scene, struct input *input, struct resources *res)
 	} else {
 		scene->can_switch = true;
 	}
+
+	if (input->space) {
+		if (render_state->can_switch_light) {
+			render_state->can_switch_light = false;
+			render_state->light_active = render_state->light_active == 0.0f ? 1.0f : 0.0f;
+		}
+	} else {
+		render_state->can_switch_light = true;
+	}
+}
+
+float vec3_magnitude(vec3s v)
+{
+	return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+vec3s vec3_normalize(vec3s v)
+{
+	float mag = vec3_magnitude(v);
+	v.x = v.y / mag;
+	v.y = v.y / mag;
+	v.z = v.z / mag;
+	return v;
+}
+
+vec3s get_up(struct transform *t)
+{
+	return glms_mat4_mulv3(t->world_transform, (vec3s){ 0.0f, 1.0f, 0.0f }, 1.0f);
+}
+
+vec3s get_forward(struct transform *t)
+{
+	return glms_mat4_mulv3(t->world_transform, (vec3s){ 0.0f, 0.0f, 1.0f }, 1.0f);
+}
+
+void update_transform_matrices(struct transform *t)
+{
+	mat4s T = glms_translate(GLMS_MAT4_IDENTITY, t->pos);
+	mat4s R = glms_quat_mat4(t->rot);
+	mat4s S = glms_scale(GLMS_MAT4_IDENTITY, t->scale);
+	t->world_transform = glms_mat4_mul(T, glms_mat4_mul(R, S));
 }
 
 void draw_scene(struct render_state *render_state, struct resources *res, struct scene *scene)
 {
-	float pos[3] = { 0.00f, 0.0f, 0.3f };
+	float pos[3] = { 0.00f, 0.0f, 0.0f };
 	float col[4] = { 0.0f, 0.3f, 0.9f };
-	float scale = 0.006f;
+	vec3s lightDir = { 0.5f, 0.3f, 0.0f };
+	struct transform t;
+	t.pos = (vec3s){ 0.0f, 0.0f, 0.0f };
+	// t.rot = (versors){ 0.0f, 0.0f, 0.0f, 1.0f };
+	t.scale = (vec3s){ 0.01f, 0.01f, 0.01f };
+	t.rot = glms_euler_xzy_quat((vec3s){ scene->rot.x, scene->rot.y, 0.0f });
+
+	update_transform_matrices(&t);
+	lightDir = vec3_normalize(lightDir);
+
 	struct mesh *ren = &res->meshes[scene->current_model];
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -456,7 +531,10 @@ void draw_scene(struct render_state *render_state, struct resources *res, struct
 	glUniform4fv(10, 1, &col[0]);
 	glUniform3fv(5, 1, &pos[0]);
 	glUniform3fv(7, 1, &scene->rot.x);
-	glUniform1f(6, scale);
+	glUniform3fv(11, 1, &lightDir.x);
+	glUniformMatrix4fv(9, 1, GL_FALSE, &scene->scene_cam.viewProj.m00);
+	glUniformMatrix4fv(13, 1, GL_FALSE, &t.world_transform.m00);
+	glUniform1f(12, render_state->light_active);
 
 	for (int i = 0; i < ren->num_sub_meshes; i++) {
 		struct sub_mesh *sm = &ren->sub_meshes[i];
@@ -465,6 +543,20 @@ void draw_scene(struct render_state *render_state, struct resources *res, struct
 		glBindVertexArray(sm->vao);
 		glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
 	}
+}
+
+void init_scene_camera(struct camera *cam)
+{
+	cam->transform.pos = (vec3s){ 0.0f, 0.0f, -10.0f };
+	cam->transform.rot = (versors){ 0.0f, 0.0f, 0.0f, 1.0f };
+	cam->transform.scale = (vec3s){ 1.0f, 1.0f, 1.0f };
+	update_transform_matrices(&cam->transform);
+	cam->fov = 78.0f;
+	cam->near = 0.1f;
+	cam->far = 1000.0f;
+	cam->proj = glms_perspective(glm_rad(cam->fov), 800.0f / 600.0f, cam->near, cam->far);
+	cam->view = glms_lookat(cam->transform.pos, get_forward(&cam->transform), get_up(&cam->transform));
+	cam->viewProj = glms_mat4_mul(cam->proj, cam->view);
 }
 
 int main()
@@ -479,6 +571,7 @@ int main()
 	memset(win, 0, sizeof(*win));
 	window_init(win, input);
 	gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress);
+	init_scene_camera(&scene->scene_cam);
 
 	res->shader = load_shader("default.vert", "default.frag");
 	render_state->clear_color[0] = 0.0f;
@@ -486,6 +579,7 @@ int main()
 	render_state->clear_color[2] = 0.0f;
 	render_state->clear_color[3] = 1.0f;
 	render_state->clear_depth = 1.0f;
+	render_state->light_active = 0.0f;
 	scene->can_switch = true;
 
 	stbi_set_flip_vertically_on_load(true);
@@ -498,7 +592,7 @@ int main()
 	while (!win->should_close) {
 		poll_events(win);
 		check_input(input);
-		update(scene, input, res);
+		update(scene, input, res, render_state);
 		draw_scene(render_state, res, scene);
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
