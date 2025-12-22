@@ -1,17 +1,20 @@
 #pragma once
+#include "SDL3/SDL_video.h"
+#include "cglm/types-struct.h"
+#define UFBX_REAL_IS_FLOAT
+#define CGLM_FORCE_LEFT_HANDED
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <time.h>
-#include "cglm/types.h"
 #include "glad/glad.h"
 #include "cglm/struct.h"
 #include "SDL3/SDL.h"
 
 #define SHADER_PATH "../../src/shaders/"
-typedef int get_color(float *f);
-get_color *helper;
+// typedef int get_color(float *f);
+// get_color *helper;
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -32,7 +35,7 @@ struct transform {
 };
 
 struct camera {
-	struct transform transform;
+	struct entity *entity;
 	mat4s proj;
 	mat4s view;
 	mat4s viewProj;
@@ -41,20 +44,32 @@ struct camera {
 	float far;
 };
 
+enum key_type { BUTTON, AXIS, COMPOSITE };
+
+enum input_state { CANCELED = 0, STARTED, ACTIVE };
+
+struct key_state {
+	enum key_type value_type;
+	enum input_state state;
+	vec2s value;
+};
+
 struct input {
+	bool (*lock_mouse)(SDL_Window *, bool);
 	const bool *keyStates;
-	vec2s movement;
 	vec2s cursorPosition;
 	float lookX;
 	float lookY;
 	float oldX;
 	float oldY;
-	bool esc;
-	bool f;
-	bool space;
-	bool mouse0;
-	bool mouse1;
-	bool del;
+	struct key_state movement;
+	struct key_state arrows;
+	struct key_state mouse0;
+	struct key_state mouse1;
+	struct key_state space;
+	struct key_state del;
+	struct key_state f;
+	struct key_state esc;
 };
 
 struct file_info {
@@ -98,9 +113,8 @@ struct mesh {
 	u32 num_sub_meshes;
 };
 
-struct renderer {
+struct mesh_renderer {
 	struct mesh *mesh;
-	float rot[3];
 };
 
 struct mesh_info {
@@ -110,7 +124,7 @@ struct mesh_info {
 };
 
 struct resources {
-	struct renderer quad;
+	struct mesh_renderer quad;
 	struct mesh *meshes;
 	struct texture *textures;
 	struct material all_mats[512];
@@ -119,14 +133,13 @@ struct resources {
 	size_t num_models;
 	size_t num_mats;
 	size_t num_mesh_infos;
-	GLuint shader;
 };
 
-struct render_state {
+struct renderer {
 	float clear_color[4];
 	float clear_depth;
 	float light_active;
-	bool can_switch_light;
+	GLuint shader;
 };
 
 struct window {
@@ -135,13 +148,42 @@ struct window {
 	bool should_close;
 };
 
+struct entity {
+	struct transform *transform;
+	struct mesh_renderer *renderer;
+	struct camera *camera;
+};
+
 struct scene {
-	struct camera scene_cam;
+	struct entity *scene_cam;
+	struct entity *model;
 	time_t last_time;
 	float time;
 	float dt;
-	float model_timer;
+	float move_speed;
+	float look_sens;
 	int current_model;
-	vec3s rot;
-	bool can_switch;
+	struct transform *transforms;
+	struct mesh_renderer *renderers;
+	struct camera *cameras;
+	struct entity *entities;
+	size_t num_entities;
+	size_t num_transforms;
+	size_t num_renderers;
+	size_t num_cameras;
+	GLenum draw_mode;
+};
+
+struct game {
+	void *lib_handle;
+	__time_t last_lib_time;
+	__time_t last_frag_time;
+	__time_t last_vert_time;
+	void (*load_functions)(struct game *, GLADloadproc);
+	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
+	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
+	void (*init_renderer)(struct renderer *);
+	void (*init_scene)(struct scene *, struct resources *);
+	void (*load_resources)(struct resources *, struct renderer *ren);
+	void (*reload_shaders)(struct renderer *);
 };

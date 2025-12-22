@@ -10,6 +10,8 @@ layout(location = 0) out vec4 fragColor;
 
 layout(location = 12) uniform float lightActive;
 
+float light_brightness = 10.5;
+
 void main() {
         vec3 texColor = texture(tex, texCoord).rgb;
 
@@ -17,8 +19,9 @@ void main() {
         //         discard;
 
         if (lightActive != 0.0) {
-                texColor += texColor * dot(lightDir, normal);
+                texColor += texColor * dot(lightDir, normal) * light_brightness;
         }
 
         fragColor = vec4(texColor, 1.0);
+        // fragColor = vec4(1.0, 1.0, 1.0, 1.0);
 }

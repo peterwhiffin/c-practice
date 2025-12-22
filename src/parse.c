@@ -4,26 +4,11 @@
 #include <string.h>
 #include <time.h>
 #include "types.h"
+#include "load.h"
 
 struct token {
 	char data[128];
 };
-
-const char *read_file(char *filename)
-{
-	long len;
-	FILE *f = fopen(filename, "r");
-	char *str;
-	fseek(f, 0, SEEK_END);
-	len = ftello(f);
-	fseek(f, 0, SEEK_SET);
-	str = malloc(len + 1);
-	fread(str, sizeof(char), len, f);
-	str[len] = '\0';
-	fclose(f);
-
-	return str;
-}
 
 struct token *get_tokens(char *filename, size_t *num_tokens)
 {
@@ -102,19 +87,19 @@ struct texture *find_texture(struct resources *win, char *name)
 	return &win->textures[0];
 }
 
-struct material *find_material(struct resources *win, char *mat_name)
+struct material *find_material(struct resources *res, struct renderer *ren, char *mat_name)
 {
-	for (int i = 0; i < win->num_mats; i++) {
-		if (strcmp(win->all_mats[i].name, mat_name) == 0) {
-			return &win->all_mats[i];
+	for (int i = 0; i < res->num_mats; i++) {
+		if (strcmp(res->all_mats[i].name, mat_name) == 0) {
+			return &res->all_mats[i];
 		}
 	}
 
-	snprintf(win->all_mats[win->num_mats].name, 128, "%s", mat_name);
-	win->all_mats[win->num_mats].shader = win->shader;
-	win->all_mats[win->num_mats].tex = NULL;
-	win->num_mats++;
-	return &win->all_mats[win->num_mats - 1];
+	snprintf(res->all_mats[res->num_mats].name, 128, "%s", mat_name);
+	res->all_mats[res->num_mats].shader = ren->shader;
+	res->all_mats[res->num_mats].tex = NULL;
+	res->num_mats++;
+	return &res->all_mats[res->num_mats - 1];
 }
 
 void write_mesh_infos(struct resources *res)
@@ -147,7 +132,7 @@ void write_tokens(struct token *tokens, size_t num_tokens)
 	fclose(f);
 }
 
-void create_mesh_infos(struct resources *res, char *filename)
+void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename)
 {
 	size_t num_mesh_infos = res->num_mesh_infos;
 	size_t num_tokens = 0;
@@ -175,7 +160,7 @@ void create_mesh_infos(struct resources *res, char *filename)
 				count += 2;
 				t = &tokens[count];
 
-				current_mat = find_material(res, t->data);
+				current_mat = find_material(res, ren, t->data);
 				current_mesh_info->mats[current_mesh_info->num_mats] = current_mat;
 				current_mesh_info->num_mats++;
 
