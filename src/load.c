@@ -1,3 +1,8 @@
+#include "cglm/struct/vec3-ext.h"
+#include "cglm/struct/vec3.h"
+#include "cglm/types-struct.h"
+#include "freetype/freetype.h"
+#include <string.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "types.h"
 #include "load.h"
@@ -97,11 +102,13 @@ GLuint load_shader(const char *vertFile, const char *fragFile)
 void load_shaders(struct renderer *ren)
 {
 	ren->shader = load_shader("default.vert", "default.frag");
+	ren->font_shader = load_shader("fontshader.vert", "fontshader.frag");
 }
 
 void reload_shaders(struct renderer *ren)
 {
 	glDeleteProgram(ren->shader);
+	glDeleteProgram(ren->font_shader);
 	load_shaders(ren);
 }
 
@@ -150,7 +157,7 @@ void create_texture(struct texture *tex, unsigned char *data)
 	glTextureParameteri(tex_id, GL_TEXTURE_MAG_FILTER, tex->filter_type);
 	glTextureStorage2D(tex_id, 1, tex->internal_format, tex->width, tex->height);
 	glTextureSubImage2D(tex_id, 0, 0, 0, tex->width, tex->height, tex->format, tex->data_type, data);
-	glGenerateTextureMipmap(tex_id);
+	// glGenerateTextureMipmap(tex_id);
 	tex->tex_id = tex_id;
 }
 
@@ -281,9 +288,16 @@ struct mesh_info *get_mesh_info(struct resources *res, const char *name)
 	return mesh_info;
 }
 
+struct vert_group {
+	struct vertex *verts[4096];
+	u32 num_vertices;
+	vec3s norm;
+};
+
 void load_model(struct resources *res, const char *path, struct mesh *mesh)
 {
-	ufbx_scene *scene = ufbx_load_file(path, NULL, NULL);
+	ufbx_load_opts opts = { 0 };
+	ufbx_scene *scene = ufbx_load_file(path, &opts, NULL);
 
 	for (size_t i = 0; i < scene->nodes.count; i++) {
 		ufbx_node *node = scene->nodes.data[i];
@@ -311,10 +325,12 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 
 			for (size_t face_ix = 0; face_ix < mesh_part->num_faces; face_ix++) {
 				ufbx_face face = node_mesh->faces.data[mesh_part->face_indices.data[face_ix]];
+
 				u32 num_tris = ufbx_triangulate_face(tri_indices, num_tri_indices, node_mesh, face);
 
 				for (size_t l = 0; l < num_tris * 3; l++) {
 					u32 index = tri_indices[l];
+
 					struct vertex *v = &vertices[num_vertices++];
 					ufbx_vec3 pos = ufbx_get_vertex_vec3(&node_mesh->vertex_position, index);
 					ufbx_vec3 normal = ufbx_get_vertex_vec3(&node_mesh->vertex_normal, index);
@@ -352,6 +368,74 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 	ufbx_free_scene(scene);
 }
 
+struct texture *get_new_texture(struct resources *res)
+{
+	struct texture *t = &res->textures[res->num_textures];
+	res->num_textures++;
+	return t;
+}
+
+void load_freetype(struct resources *res)
+{
+	if (FT_Init_FreeType(&res->ft)) {
+		printf("ERROR::Init freetype");
+		return;
+	}
+
+	int error = 0;
+	if ((error = FT_New_Face(res->ft, "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf", 0,
+				 &res->font_face))) {
+		printf("ERROR::Load font face: %s\n", FT_Error_String(error));
+		return;
+	}
+
+	FT_Set_Pixel_Sizes(res->font_face, 0, 48);
+
+	for (int i = 0; i < 128; i++) {
+		if (FT_Load_Char(res->font_face, i, FT_LOAD_RENDER)) {
+			printf("ERROR::Load freetype char");
+			return;
+		}
+
+		struct font_character *fc = &res->font_characters[i];
+		fc->tex = get_new_texture(res);
+		struct texture *tex = fc->tex;
+
+		tex->internal_format = GL_R8;
+		tex->width = res->font_face->glyph->bitmap.width;
+		tex->height = res->font_face->glyph->bitmap.rows;
+		tex->format = GL_RED;
+		tex->data_type = GL_UNSIGNED_BYTE;
+		tex->wrap_type = GL_CLAMP_TO_EDGE;
+		tex->filter_type = GL_LINEAR;
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		create_texture(tex, res->font_face->glyph->bitmap.buffer);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+		fc->glyph_size = (vec2s){ res->font_face->glyph->bitmap.width, res->font_face->glyph->bitmap.rows };
+		fc->bearing = (vec2s){ res->font_face->glyph->bitmap_left, res->font_face->glyph->bitmap_top };
+		fc->advance = res->font_face->glyph->advance.x;
+	}
+
+	FT_Done_Face(res->font_face);
+	FT_Done_FreeType(res->ft);
+
+	GLuint vao;
+	GLuint vbo;
+
+	glCreateVertexArrays(1, &vao);
+	glCreateBuffers(1, &vbo);
+
+	glNamedBufferStorage(vbo, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_STORAGE_BIT);
+	glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(float) * 4);
+	glEnableVertexArrayAttrib(vao, 0);
+	glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vao, 0, 0);
+
+	res->font_vao = vao;
+	res->font_vbo = vbo;
+}
+
 void load_resources(struct resources *res, struct renderer *ren)
 {
 	stbi_set_flip_vertically_on_load(true);
@@ -366,18 +450,30 @@ void load_resources(struct resources *res, struct renderer *ren)
 
 	res->mesh_infos = malloc(sizeof(struct mesh_info) * 40000);
 	res->meshes = malloc(sizeof(struct mesh) * model_count);
-	res->textures = malloc(sizeof(struct texture) * tex_count);
+	res->textures = malloc(sizeof(struct texture) * (tex_count + 1000));
 
 	for (int i = 0; i < tex_count; i++) {
-		struct texture *tex = &res->textures[res->num_textures];
+		struct texture *tex = get_new_texture(res);
 		snprintf(tex->path, 128, "%s", texture_files[i].full_path);
 		snprintf(tex->ext, 128, "%s", texture_files[i].extension);
 		snprintf(tex->filename, 128, "%s", texture_files[i].file_name);
 		snprintf(tex->name, 128, "%s", texture_files[i].name);
 		load_image(texture_files[i].full_path, tex);
 		// printf("loaded tex: %s\n", res->textures[res->num_textures].name);
-		res->num_textures++;
 	}
+
+	struct texture *tex = &res->white_tex;
+
+	unsigned char white_pixel[3] = { 255, 255, 255 };
+
+	tex->data_type = GL_UNSIGNED_BYTE;
+	tex->wrap_type = GL_REPEAT;
+	tex->filter_type = GL_NEAREST;
+	tex->width = 1;
+	tex->height = 1;
+	tex->format = GL_RGB;
+	tex->internal_format = GL_SRGB8;
+	create_texture(tex, white_pixel);
 
 	// create_mesh_infos(res, ren, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
 	create_mesh_infos(res, ren, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt");
@@ -386,6 +482,8 @@ void load_resources(struct resources *res, struct renderer *ren)
 		load_model(res, model_files[i].full_path, &res->meshes[res->num_models]);
 		res->num_models++;
 	}
+
+	load_freetype(res);
 
 	free(model_files);
 	free(texture_files);

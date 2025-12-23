@@ -22,6 +22,6 @@ void main() {
                 texColor += texColor * dot(lightDir, normal) * light_brightness;
         }
 
-        fragColor = vec4(texColor, 1.0);
+        fragColor = vec4(texColor, 1.0) * color;
         // fragColor = vec4(1.0, 1.0, 1.0, 1.0);
 }

@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include "glad/glad.h"
+#include "ft2build.h"
+#include FT_FREETYPE_H
 #include "cglm/struct.h"
 #include "SDL3/SDL.h"
 
@@ -25,6 +27,7 @@ struct vertex {
 	vec3s pos;
 	vec3s normal;
 	vec2s uv;
+	uint num_normals;
 };
 
 struct transform {
@@ -123,10 +126,23 @@ struct mesh_info {
 	size_t num_mats;
 };
 
+struct font_character {
+	struct texture *tex;
+	vec2s glyph_size;
+	vec2s bearing;
+	u32 advance;
+};
+
 struct resources {
+	FT_Library ft;
+	FT_Face font_face;
+	GLuint font_vao;
+	GLuint font_vbo;
 	struct mesh_renderer quad;
 	struct mesh *meshes;
+	struct font_character font_characters[128];
 	struct texture *textures;
+	struct texture white_tex;
 	struct material all_mats[512];
 	struct mesh_info *mesh_infos;
 	size_t num_textures;
@@ -139,7 +155,9 @@ struct renderer {
 	float clear_color[4];
 	float clear_depth;
 	float light_active;
+	mat4s text_proj;
 	GLuint shader;
+	GLuint font_shader;
 };
 
 struct window {
@@ -179,6 +197,8 @@ struct game {
 	__time_t last_lib_time;
 	__time_t last_frag_time;
 	__time_t last_vert_time;
+	__time_t last_font_frag_time;
+	__time_t last_font_vert_time;
 	void (*load_functions)(struct game *, GLADloadproc);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);

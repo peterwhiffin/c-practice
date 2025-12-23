@@ -12,6 +12,7 @@ void window_init(struct window *win, struct input *input)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
 	win->sdl_win = SDL_CreateWindow("practice", 800, 600, SDL_WINDOW_OPENGL);
 	win->ctx = SDL_GL_CreateContext(win->sdl_win);
@@ -110,8 +111,8 @@ void load_lib(struct game *game)
 {
 	char *error;
 	const char *compile_command =
-		"clang -g -fPIC -c ../../src/game.c -I../../../cglm/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include  -o game.o";
-	const char *link_command = "clang -shared -lSDL3 -lm -o libgamelib.so game.o";
+		"clang -g -fPIC -c ../../src/game.c -I../../../cglm/include -I../../../freetype/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include -o game.o";
+	const char *link_command = "clang -shared game.o -L../../lib/lin -lfreetype -lSDL3 -lm -o libgamelib.so";
 
 	if (game->lib_handle != NULL) {
 		dlclose(game->lib_handle);
@@ -163,7 +164,23 @@ void check_modified(struct game *game, struct window *win, struct input *input, 
 
 	if (file_stat.st_mtim.tv_sec > game->last_vert_time) {
 		game->last_vert_time = file_stat.st_mtim.tv_sec;
-		printf("fragment shader modified\n");
+		printf("vert shader modified\n");
+		game->reload_shaders(ren);
+	}
+
+	stat("../../src/shaders/fontshader.frag", &file_stat);
+
+	if (file_stat.st_mtim.tv_sec > game->last_font_frag_time) {
+		game->last_font_frag_time = file_stat.st_mtim.tv_sec;
+		printf("font fragment shader modified\n");
+		game->reload_shaders(ren);
+	}
+
+	stat("../../src/shaders/fontshader.vert", &file_stat);
+
+	if (file_stat.st_mtim.tv_sec > game->last_font_vert_time) {
+		game->last_font_vert_time = file_stat.st_mtim.tv_sec;
+		printf("font vert shader modified\n");
 		game->reload_shaders(ren);
 	}
 }

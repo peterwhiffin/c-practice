@@ -10,6 +10,7 @@ layout(location = 9) uniform mat4 viewProj;
 layout(location = 13) uniform mat4 model;
 
 layout(location = 23) uniform float time;
+layout(location = 24) uniform float normal_expansion;
 
 layout(location = 4) out vec2 texCoord;
 layout(location = 8) out vec3 normal;
@@ -21,5 +22,5 @@ void main() {
         vec3 finalPos = vec3(model * vec4(temp_pos, 1.0));
         normal = aNormal * finalPos;
 
-        gl_Position = viewProj * vec4(finalPos, 1.0);
+        gl_Position = viewProj * vec4(finalPos + aNormal * normal_expansion, 1.0);
 }
