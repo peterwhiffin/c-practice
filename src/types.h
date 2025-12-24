@@ -23,6 +23,12 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+struct arena {
+	u8 *mem;
+	u64 pos;
+	size_t size;
+};
+
 struct vertex {
 	vec3s pos;
 	vec3s normal;
@@ -65,11 +71,13 @@ struct input {
 	float lookY;
 	float oldX;
 	float oldY;
+	struct key_state mouse_wheel;
 	struct key_state movement;
 	struct key_state arrows;
 	struct key_state mouse0;
 	struct key_state mouse1;
 	struct key_state space;
+	struct key_state left_shift;
 	struct key_state del;
 	struct key_state f;
 	struct key_state esc;
@@ -144,11 +152,9 @@ struct resources {
 	struct texture *textures;
 	struct texture white_tex;
 	struct material all_mats[512];
-	struct mesh_info *mesh_infos;
 	size_t num_textures;
 	size_t num_models;
 	size_t num_mats;
-	size_t num_mesh_infos;
 };
 
 struct renderer {
@@ -175,12 +181,6 @@ struct entity {
 struct scene {
 	struct entity *scene_cam;
 	struct entity *model;
-	time_t last_time;
-	float time;
-	float dt;
-	float move_speed;
-	float look_sens;
-	int current_model;
 	struct transform *transforms;
 	struct mesh_renderer *renderers;
 	struct camera *cameras;
@@ -189,21 +189,23 @@ struct scene {
 	size_t num_transforms;
 	size_t num_renderers;
 	size_t num_cameras;
+	float move_speed;
+	float move_mod;
+	float look_sens;
+	float time;
+	float dt;
+	time_t last_time;
+	int current_model;
 	GLenum draw_mode;
 };
 
 struct game {
 	void *lib_handle;
-	__time_t last_lib_time;
-	__time_t last_frag_time;
-	__time_t last_vert_time;
-	__time_t last_font_frag_time;
-	__time_t last_font_vert_time;
 	void (*load_functions)(struct game *, GLADloadproc);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
 	void (*init_renderer)(struct renderer *);
 	void (*init_scene)(struct scene *, struct resources *);
-	void (*load_resources)(struct resources *, struct renderer *ren);
+	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
 	void (*reload_shaders)(struct renderer *);
 };

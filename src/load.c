@@ -1,7 +1,9 @@
+#include "arena.h"
 #include "cglm/struct/vec3-ext.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
 #include "freetype/freetype.h"
+#include <stddef.h>
 #include <string.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "types.h"
@@ -274,14 +276,14 @@ void get_resource_files(char *path, struct file_info *model_files, struct file_i
 	closedir(dir_stream);
 }
 
-struct mesh_info *get_mesh_info(struct resources *res, const char *name)
+struct mesh_info *get_mesh_info(struct mesh_info *mesh_infos, size_t num_mesh_infos, const char *name)
 {
 	struct mesh_info *mesh_info = NULL;
 
-	for (int i = 0; i < res->num_mesh_infos; i++) {
-		mesh_info = &res->mesh_infos[i];
+	for (int i = 0; i < num_mesh_infos; i++) {
+		mesh_info = &mesh_infos[i];
 		if (strcmp(name, mesh_info->name) == 0) {
-			return &res->mesh_infos[i];
+			return &mesh_infos[i];
 		}
 	}
 
@@ -294,7 +296,8 @@ struct vert_group {
 	vec3s norm;
 };
 
-void load_model(struct resources *res, const char *path, struct mesh *mesh)
+void load_model(struct resources *res, const char *path, struct mesh *mesh, struct mesh_info *mesh_infos,
+		size_t num_mesh_infos)
 {
 	ufbx_load_opts opts = { 0 };
 	ufbx_scene *scene = ufbx_load_file(path, &opts, NULL);
@@ -310,7 +313,7 @@ void load_model(struct resources *res, const char *path, struct mesh *mesh)
 		mesh->sub_meshes = malloc(sizeof(struct sub_mesh) * mesh->num_sub_meshes);
 		snprintf(mesh->name, 256, "%s", node->name.data);
 
-		struct mesh_info *current_mesh_info = get_mesh_info(res, node->name.data);
+		struct mesh_info *current_mesh_info = get_mesh_info(mesh_infos, num_mesh_infos, node->name.data);
 		size_t mat_index = 0;
 
 		for (int k = 0; k < node_mesh->material_parts.count; k++) {
@@ -436,21 +439,23 @@ void load_freetype(struct resources *res)
 	res->font_vbo = vbo;
 }
 
-void load_resources(struct resources *res, struct renderer *ren)
+void load_resources(struct resources *res, struct renderer *ren, struct arena *arena)
 {
-	stbi_set_flip_vertically_on_load(true);
-	char *startDir = "../../res/horror/";
-	struct file_info *model_files = malloc(sizeof(*model_files) * 2048);
-	struct file_info *texture_files = malloc(sizeof(*texture_files) * 2048);
 	size_t model_count = 0;
 	size_t tex_count = 0;
 	size_t num_mesh_infos = 0;
+	char *startDir = "../../res/horror/";
+	struct arena *temp_arena = get_new_arena((size_t)1 << 30);
+	struct file_info *model_files = alloc_struct(temp_arena, typeof(*model_files), 2048);
+	struct file_info *texture_files = alloc_struct(temp_arena, typeof(*texture_files), 2048);
+	struct mesh_info *mesh_infos = alloc_struct(temp_arena, typeof(*mesh_infos), 40000);
 
 	get_resource_files(startDir, model_files, texture_files, &model_count, &tex_count);
 
-	res->mesh_infos = malloc(sizeof(struct mesh_info) * 40000);
-	res->meshes = malloc(sizeof(struct mesh) * model_count);
-	res->textures = malloc(sizeof(struct texture) * (tex_count + 1000));
+	res->meshes = alloc_struct(arena, typeof(*res->meshes), model_count);
+	res->textures = alloc_struct(arena, typeof(*res->textures), tex_count + 1000);
+
+	stbi_set_flip_vertically_on_load(true);
 
 	for (int i = 0; i < tex_count; i++) {
 		struct texture *tex = get_new_texture(res);
@@ -459,7 +464,6 @@ void load_resources(struct resources *res, struct renderer *ren)
 		snprintf(tex->filename, 128, "%s", texture_files[i].file_name);
 		snprintf(tex->name, 128, "%s", texture_files[i].name);
 		load_image(texture_files[i].full_path, tex);
-		// printf("loaded tex: %s\n", res->textures[res->num_textures].name);
 	}
 
 	struct texture *tex = &res->white_tex;
@@ -476,16 +480,14 @@ void load_resources(struct resources *res, struct renderer *ren)
 	create_texture(tex, white_pixel);
 
 	// create_mesh_infos(res, ren, "../../res/dungeon/SourceFiles/MaterialList_PolygonDungeon.txt");
-	create_mesh_infos(res, ren, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt");
+	create_mesh_infos(res, ren, "../../res/horror/SourceFiles/MaterialList_PolygonHorrorMansion.txt", mesh_infos,
+			  &num_mesh_infos);
 
 	for (int i = 0; i < model_count; i++) {
-		load_model(res, model_files[i].full_path, &res->meshes[res->num_models]);
+		load_model(res, model_files[i].full_path, &res->meshes[res->num_models], mesh_infos, num_mesh_infos);
 		res->num_models++;
 	}
 
 	load_freetype(res);
-
-	free(model_files);
-	free(texture_files);
-	free(res->mesh_infos);
+	arena_free(temp_arena);
 }

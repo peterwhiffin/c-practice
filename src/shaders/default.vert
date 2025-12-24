@@ -17,10 +17,11 @@ layout(location = 8) out vec3 normal;
 
 void main() {
         texCoord = aTexCoord;
+        mat3 normalMat = transpose(inverse(mat3(model)));
 
         vec3 temp_pos = aPos;
         vec3 finalPos = vec3(model * vec4(temp_pos, 1.0));
-        normal = aNormal * finalPos;
+        normal = normalize(normalMat * aNormal);
 
-        gl_Position = viewProj * vec4(finalPos + aNormal * normal_expansion, 1.0);
+        gl_Position = viewProj * vec4(finalPos + normal * normal_expansion, 1.0);
 }

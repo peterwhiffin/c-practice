@@ -1,4 +1,5 @@
 #include "cglm/struct/cam.h"
+#include "cglm/struct/mat4.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
 #include "cglm/types.h"
@@ -88,8 +89,10 @@ void update(struct scene *scene, struct input *input, struct resources *res, str
 		vec3s right = get_right(scene->scene_cam->transform);
 		vec3s move_dir = glms_vec3_add(glms_vec3_scale(forward, input->movement.value.y),
 					       glms_vec3_scale(right, input->movement.value.x));
-		vec3s new_pos = glms_vec3_add(scene->scene_cam->transform->pos,
-					      glms_vec3_scale(move_dir, scene->move_speed * scene->dt));
+		vec3s new_pos = glms_vec3_add(
+			scene->scene_cam->transform->pos,
+			glms_vec3_scale(move_dir, scene->move_speed * scene->dt +
+							  (scene->move_mod * input->left_shift.value.raw[0])));
 		set_position(scene->scene_cam->transform, new_pos);
 	}
 
@@ -127,7 +130,6 @@ void draw_text(struct renderer *ren, struct resources *res, const char *text, si
 	for (int i = 0; i < length; i++) {
 		struct font_character *c = &res->font_characters[text[i]];
 
-		printf("tex id: %u\n", res->font_characters[text[i]].tex->tex_id);
 		float xpos = x + c->bearing.x * scale;
 		float ypos = y - (c->glyph_size.y - c->bearing.y) * scale;
 		float w = c->glyph_size.x * scale;
@@ -208,6 +210,7 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 		glStencilMask(0x00);
 		glDisable(GL_DEPTH_TEST);
 
+		glUniform1f(12, 0.0f);
 		glUniform1f(24, 0.008f);
 		for (int i = 0; i < mr->mesh->num_sub_meshes; i++) {
 			struct sub_mesh *sm = &mr->mesh->sub_meshes[i];
@@ -224,7 +227,7 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 		glEnable(GL_DEPTH_TEST);
 	}
 
-	const char *test_text = "Test text.\0";
+	const char *test_text = "It's text.\0";
 
 	draw_text(ren, res, test_text, strlen(test_text), 25, 25, 1.0f);
 }

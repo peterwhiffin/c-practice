@@ -102,23 +102,23 @@ struct material *find_material(struct resources *res, struct renderer *ren, char
 	return &res->all_mats[res->num_mats - 1];
 }
 
-void write_mesh_infos(struct resources *res)
-{
-	FILE *f = fopen("testmeshinfostoo.txt", "w");
-
-	for (int i = 0; i < res->num_mesh_infos; i++) {
-		struct mesh_info *mesh_info = &res->mesh_infos[i];
-
-		fprintf(f, "mesh: %s\n", mesh_info->name);
-		for (int k = 0; k < mesh_info->num_mats; k++) {
-			struct material *mat = mesh_info->mats[k];
-			fprintf(f, "	mat: %s\n", mat->name);
-			fprintf(f, "		tex: %s\n", mat->tex->name);
-		}
-	}
-
-	fclose(f);
-}
+// void write_mesh_infos(struct resources *res)
+// {
+// 	FILE *f = fopen("testmeshinfostoo.txt", "w");
+//
+// 	for (int i = 0; i < res->num_mesh_infos; i++) {
+// 		struct mesh_info *mesh_info = &res->mesh_infos[i];
+//
+// 		fprintf(f, "mesh: %s\n", mesh_info->name);
+// 		for (int k = 0; k < mesh_info->num_mats; k++) {
+// 			struct material *mat = mesh_info->mats[k];
+// 			fprintf(f, "	mat: %s\n", mat->name);
+// 			fprintf(f, "		tex: %s\n", mat->tex->name);
+// 		}
+// 	}
+//
+// 	fclose(f);
+// }
 
 void write_tokens(struct token *tokens, size_t num_tokens)
 {
@@ -132,9 +132,9 @@ void write_tokens(struct token *tokens, size_t num_tokens)
 	fclose(f);
 }
 
-void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename)
+void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename, struct mesh_info *mesh_infos,
+		       size_t *num_mesh_infos)
 {
-	size_t num_mesh_infos = res->num_mesh_infos;
 	size_t num_tokens = 0;
 	size_t count = 0;
 	struct mesh_info *current_mesh_info;
@@ -148,10 +148,10 @@ void create_mesh_infos(struct resources *res, struct renderer *ren, char *filena
 			count += 2;
 			t = &tokens[count];
 
-			current_mesh_info = &res->mesh_infos[num_mesh_infos];
+			current_mesh_info = &mesh_infos[*num_mesh_infos];
 			current_mesh_info->num_mats = 0;
 			snprintf(current_mesh_info->name, 128, "%s", t->data);
-			num_mesh_infos++;
+			*num_mesh_infos += 1;
 
 			count++;
 			t = &tokens[count];
@@ -184,6 +184,6 @@ void create_mesh_infos(struct resources *res, struct renderer *ren, char *filena
 		count = count + 3;
 	}
 
-	res->num_mesh_infos = num_mesh_infos - 1;
+	*num_mesh_infos -= 1;
 	free(tokens);
 }
