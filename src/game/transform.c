@@ -2,7 +2,7 @@
 #include "cglm/struct/quat.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
-#include "types.h"
+#include "../types.h"
 
 float vec3_magnitude(vec3s v)
 {

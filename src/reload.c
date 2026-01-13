@@ -4,58 +4,151 @@
 #include <stddef.h>
 #include <string.h>
 #include <sys/poll.h>
+#include <dlfcn.h>
 #include "stdio.h"
 #include "syscall.h"
 #include "unistd.h"
 #include "poll.h"
-#include "load.h"
+#include "renderer/load.h"
 #include "types.h"
 
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define BUF_LEN (1024 * (EVENT_SIZE + 16))
 #define MAX_RELOADS 64
 
-enum reload_flags { RELOAD_NONE = 0, RELOAD_SHADERS = 1 << 0, RELOAD_SOURCE = 1 << 1 };
-
-struct reload_func {
-	void (*func)(void *params);
-	void *args;
-};
+enum reload_flags { RELOAD_NONE = 0, RELOAD_SHADERS = 1 << 0, RELOAD_RENDERER = 1 << 1, RELOAD_GAME = 1 << 2 };
 
 struct notify {
 	int notify_fd;
-	int watch;
+	int shader_watch;
+	int renderer_watch;
+	int game_watch;
+	int resource_watch;
 	char buffer[BUF_LEN];
 	enum reload_flags flags;
-	struct reload_func shader_func;
-	struct reload_func *reloads;
 	u32 num_reloads;
 };
 
-void notify_init(struct notify *notify, struct game *game, struct renderer *ren)
+void load_renderer(struct renderer *ren, struct resources *res, struct arena *arena)
+{
+	char *error;
+	const char *compile_command =
+		"clang -g -fPIC -c ../../src/renderer/renderer.c -I../../../cglm/include -I../../../freetype/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include -o renderer.o";
+	const char *link_command =
+		"clang -shared renderer.o -L../../lib/lin -lfreetype -lSDL3 -lm -o librendererlib.so";
+
+	if (ren->lib_handle != NULL) {
+		dlclose(ren->lib_handle);
+	}
+
+	//need to actually handle status.
+	int status = system(compile_command);
+	status = system(link_command);
+	ren->lib_handle = dlopen("./librendererlib.so", RTLD_LAZY);
+
+	if (!ren->lib_handle) {
+		printf("handle error\n");
+		fprintf(stderr, "%s\n", dlerror());
+		exit(EXIT_FAILURE);
+	}
+
+	ren->load_functions = dlsym(ren->lib_handle, "load_functions");
+
+	if ((error = dlerror()) != NULL) {
+		printf("dlsym error\n");
+		fprintf(stderr, "%s\n", error);
+		exit(EXIT_FAILURE);
+	}
+
+	ren->load_functions(ren, (GLADloadproc)SDL_GL_GetProcAddress);
+}
+
+void load_game_lib(struct game *game)
+{
+	char *error;
+	const char *compile_command =
+		"clang -g -fPIC -c ../../src/game/game.c -I../../../cglm/include -I../../../freetype/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include -o game.o";
+	const char *link_command = "clang -shared game.o -L../../lib/lin -lfreetype -lSDL3 -lm -o libgamelib.so";
+
+	if (game->lib_handle != NULL) {
+		dlclose(game->lib_handle);
+	}
+
+	//need to actually handle status.
+	int status = system(compile_command);
+	status = system(link_command);
+	game->lib_handle = dlopen("./libgamelib.so", RTLD_LAZY);
+
+	if (!game->lib_handle) {
+		printf("handle error\n");
+		fprintf(stderr, "%s\n", dlerror());
+		exit(EXIT_FAILURE);
+	}
+
+	game->load_functions = dlsym(game->lib_handle, "load_game_functions");
+
+	if ((error = dlerror()) != NULL) {
+		printf("dlsym error\n");
+		fprintf(stderr, "%s\n", error);
+		exit(EXIT_FAILURE);
+	}
+
+	game->load_functions(game);
+}
+
+void load_editor_lib(struct editor *editor)
+{
+	char *error;
+	const char *compile_command =
+		"clang++ -g -fPIC -c ../../src/editor/editor.cpp -I../../../cglm/include -I../../../freetype/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include -o editor.o";
+	const char *link_command = "clang++ -shared editor.o -L../../lib/lin -lSDL3 -lm -o libeditorlib.so";
+
+	if (editor->lib_handle != NULL) {
+		dlclose(editor->lib_handle);
+	}
+
+	//need to actually handle status.
+	int status = system(compile_command);
+	status = system(link_command);
+	editor->lib_handle = dlopen("./libeditorlib.so", RTLD_LAZY);
+
+	if (!editor->lib_handle) {
+		fprintf(stderr, "%s%s\n", "DLOPEN::", dlerror());
+		exit(EXIT_FAILURE);
+	}
+
+	editor->load_functions = dlsym(editor->lib_handle, "load_functions");
+
+	if ((error = dlerror()) != NULL) {
+		fprintf(stderr, "%s%s\n", "DLSYM::", error);
+		exit(EXIT_FAILURE);
+	}
+
+	editor->load_functions(editor);
+}
+void notify_init(struct notify *notify)
 {
 	notify->notify_fd = inotify_init();
 	notify->flags = 0;
-	//don't really need this. flags are enough for now.
-	// notify->num_reloads = 0;
-	// notify->shader_func.func = (void *)game->reload_shaders;
-	// notify->shader_func.args = (void *)ren;
-	// notify->reloads = malloc(sizeof(struct reload_func) * MAX_RELOADS);
 
 	if (notify->notify_fd < 0) {
 		printf("ERROR::INOTIFY_INIT::%s\n", strerror(errno));
 		return;
 	}
 
-	notify->watch = inotify_add_watch(notify->notify_fd, "../../src/shaders", IN_MODIFY);
+	notify->shader_watch = inotify_add_watch(notify->notify_fd, "../../src/shaders", IN_MODIFY);
+	notify->renderer_watch = inotify_add_watch(notify->notify_fd, "../../src/renderer", IN_MODIFY);
+	notify->game_watch = inotify_add_watch(notify->notify_fd, "../../src/game", IN_MODIFY);
+	notify->resource_watch = inotify_add_watch(notify->notify_fd, "../../res/export/pete", IN_MODIFY);
 
-	if (notify->watch < 0) {
+	if (notify->shader_watch < 0) {
 		printf("ERROR::INOTIFY_ADD_WATCH::%s\n", strerror(errno));
 		return;
 	}
 }
 
-void check_modified(struct notify *notify, struct game *game, struct renderer *ren)
+void check_modified(struct notify *notify, struct game *game, struct renderer *ren, struct resources *res,
+		    struct arena *main_arena, struct arena *render_arena, struct window *win)
 {
 	struct pollfd fdset[1];
 	int nfds = 1;
@@ -79,16 +172,35 @@ void check_modified(struct notify *notify, struct game *game, struct renderer *r
 
 		while (i < length) {
 			struct inotify_event *event = (struct inotify_event *)&notify->buffer[i];
-			if (event->len) {
-				if (event->mask & IN_MODIFY) {
-					if (notify->flags & RELOAD_SHADERS)
-						continue;
+			printf("event name: %s\n", event->name);
+			if (event->mask & IN_MODIFY) {
+				if (event->wd == notify->shader_watch) {
+					if (!(notify->flags & RELOAD_SHADERS)) {
+						notify->flags |= RELOAD_SHADERS;
+						ren->reload_shaders(ren);
+					}
+				} else if (event->wd == notify->renderer_watch) {
+					if (!(notify->flags & RELOAD_RENDERER)) {
+						notify->flags |= RELOAD_RENDERER;
+						load_renderer(ren, res, render_arena);
+						ren->reload_renderer(ren, res, render_arena, win);
+					}
+				} else if (event->wd == notify->game_watch) {
+					if (!(notify->flags & RELOAD_GAME)) {
+						notify->flags |= RELOAD_GAME;
+						load_game_lib(game);
+					}
+				} else if (event->wd == notify->resource_watch) {
+					printf("resource changed: %s\n", event->name);
+					for (int i = 0; i < res->num_models; i++) {
+						struct model_import *model = &res->model_imports[i];
+						printf("model name: %s - event name: %s\n", model->file_info.filename,
+						       event->name);
 
-					game->reload_shaders(ren);
-
-					// notify->flags |= RELOAD_SHADERS;
-					// notify->reloads[notify->num_reloads] = notify->shader_func;
-					// notify->num_reloads++;
+						if (strcmp(model->file_info.filename, event->name) == 0) {
+							ren->reload_model(res, ren, model);
+						}
+					}
 				}
 			}
 
@@ -96,11 +208,5 @@ void check_modified(struct notify *notify, struct game *game, struct renderer *r
 		}
 	}
 
-	// for (int i = 0; i < notify->num_reloads; i++) {
-	// 	struct reload_func *reload = &notify->reloads[i];
-	// 	reload->func(reload->args);
-	// }
-	//
-	// notify->flags = 0;
-	// notify->num_reloads = 0;
+	notify->flags = 0;
 }

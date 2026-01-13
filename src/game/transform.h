@@ -1,5 +1,5 @@
 #pragma once
-#include "types.h"
+#include "../types.h"
 
 float vec3_magnitude(vec3s v);
 vec3s vec3_normalize(vec3s v);

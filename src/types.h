@@ -1,22 +1,22 @@
 #pragma once
-#include "SDL3/SDL_video.h"
-#include "cglm/types-struct.h"
-#define UFBX_REAL_IS_FLOAT
-#define CGLM_FORCE_LEFT_HANDED
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <time.h>
+#include "SDL3/SDL_events.h"
+#include "cglm/types-struct.h"
+#ifdef NO_GLAD
+#else
 #include "glad/glad.h"
+#endif
 #include "ft2build.h"
+#include "renderer/ufbx.h"
 #include FT_FREETYPE_H
 #include "cglm/struct.h"
 #include "SDL3/SDL.h"
 
 #define SHADER_PATH "../../src/shaders/"
-// typedef int get_color(float *f);
-// get_color *helper;
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -33,7 +33,7 @@ struct vertex {
 	vec3s pos;
 	vec3s normal;
 	vec2s uv;
-	uint num_normals;
+	u32 num_normals;
 };
 
 struct transform {
@@ -53,56 +53,49 @@ struct camera {
 	float far;
 };
 
-enum key_type { BUTTON, AXIS, COMPOSITE };
+enum action_type { BUTTON, AXIS, COMPOSITE };
 
-enum input_state { CANCELED = 0, STARTED, ACTIVE };
+enum action_state { CANCELED = 0, STARTED, ACTIVE };
 
-struct key_state {
-	enum key_type value_type;
-	enum input_state state;
-	vec2s value;
+struct key_action {
+	enum action_type type;
+	enum action_state state;
+	union {
+		vec2s composite;
+		float axis;
+		bool pushed;
+	};
 };
+
+enum key_actions { MWHEEL = 0, MOUSE_DELTA, WASD, ARROWS, M0, M1, SPACE, LSHIFT, DELETE, F, P, ESC, ACTION_COUNT };
 
 struct input {
 	bool (*lock_mouse)(SDL_Window *, bool);
-	const bool *keyStates;
+	const bool *sdl_keys;
 	vec2s cursorPosition;
-	float lookX;
-	float lookY;
-	float oldX;
-	float oldY;
-	struct key_state mouse_wheel;
-	struct key_state movement;
-	struct key_state arrows;
-	struct key_state mouse0;
-	struct key_state mouse1;
-	struct key_state space;
-	struct key_state left_shift;
-	struct key_state del;
-	struct key_state f;
-	struct key_state esc;
+	vec2s relativeCursorPosition;
+	struct key_action actions[ACTION_COUNT];
 };
 
 struct file_info {
-	char full_path[512];
-	char file_name[128];
+	char path[512];
+	char filename[256];
 	char extension[128];
-	char name[128];
+	char name[256];
 };
 
 struct texture {
-	char path[512];
-	char filename[256];
-	char name[256];
-	char ext[128];
-	GLuint tex_id;
+	struct file_info file_info;
+	GLuint id;
 	GLenum format;
 	GLenum internal_format;
 	GLenum data_type;
+	GLenum attachment;
 	GLint wrap_type;
 	GLint filter_type;
 	GLuint width;
 	GLuint height;
+	bool mips;
 };
 
 struct material {
@@ -114,6 +107,8 @@ struct material {
 struct sub_mesh {
 	struct material *mat;
 	GLuint vao;
+	GLuint vbo;
+	GLuint ebo;
 	GLintptr ind_offset;
 	GLuint ind_count;
 };
@@ -124,7 +119,14 @@ struct mesh {
 	u32 num_sub_meshes;
 };
 
+struct model_import {
+	struct file_info file_info;
+	struct mesh **meshes;
+	u32 num_meshes;
+};
+
 struct mesh_renderer {
+	struct entity *entity;
 	struct mesh *mesh;
 };
 
@@ -132,6 +134,7 @@ struct mesh_info {
 	char name[256];
 	struct material *mats[12];
 	size_t num_mats;
+	float import_scale;
 };
 
 struct font_character {
@@ -144,43 +147,60 @@ struct font_character {
 struct resources {
 	FT_Library ft;
 	FT_Face font_face;
-	GLuint font_vao;
-	GLuint font_vbo;
+	// GLuint font_vao;
+	// GLuint font_vbo;
 	struct mesh_renderer quad;
 	struct mesh *meshes;
 	struct font_character font_characters[128];
 	struct texture *textures;
 	struct texture white_tex;
 	struct material all_mats[512];
-	size_t num_textures;
+	struct material *default_mat;
+	struct mesh_info *default_mesh_info;
+	struct model_import *model_imports;
+	struct mesh_info *mesh_infos;
 	size_t num_models;
+	size_t num_textures;
+	size_t num_meshes;
 	size_t num_mats;
+	size_t num_mesh_infos;
 };
 
-struct renderer {
-	float clear_color[4];
-	float clear_depth;
-	float light_active;
-	mat4s text_proj;
-	GLuint shader;
-	GLuint font_shader;
+struct renderbuffer {
+	GLuint id;
+	GLenum attachment;
+	GLenum internal_format;
+};
+
+struct framebuffer {
+	GLuint id;
+	u32 width;
+	u32 height;
+	struct renderbuffer rb;
+	struct texture targets;
+	u32 num_targets;
 };
 
 struct window {
 	SDL_Window *sdl_win;
 	SDL_GLContext ctx;
+	vec2s size;
+	float aspect;
 	bool should_close;
 };
 
 struct entity {
+	u32 id;
 	struct transform *transform;
 	struct mesh_renderer *renderer;
 	struct camera *camera;
 };
 
+enum edit_mode { DEFAULT, PLACE };
+
 struct scene {
 	struct entity *scene_cam;
-	struct entity *model;
+	struct entity *preview_model;
 	struct transform *transforms;
 	struct mesh_renderer *renderers;
 	struct camera *cameras;
@@ -197,15 +217,73 @@ struct scene {
 	time_t last_time;
 	int current_model;
 	GLenum draw_mode;
+	int text_offset;
+	enum edit_mode mode;
+	vec3s place_pos;
+	float pitch;
+	float yaw;
+	u32 next_id;
+};
+
+struct texture_list {
+	struct texture *first_free_tex;
+	struct texture *next;
+};
+
+struct renderer {
+	void *lib_handle;
+	void (*load_functions)(struct renderer *, GLADloadproc);
+	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
+	void (*window_resized)(struct renderer *, struct window *, struct arena *);
+	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
+	void (*draw_fullscreen_quad)(struct renderer *);
+	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
+	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
+	void (*reload_shaders)(struct renderer *);
+	void (*reload_model)(struct resources *, struct renderer *, struct model_import *);
+
+	struct input *input;
+	float clear_color[4];
+	float clear_depth;
+	float light_active;
+	mat4s text_proj;
+	struct window *win;
+	GLuint default_shader;
+	GLuint fullscreen_shader;
+	GLuint text_shader;
+	GLuint gui_shader;
+	GLuint skybox_shader;
+	GLuint quad_vao;
+	GLuint quad_vbo;
+	GLuint quad_ebo;
+
+	GLuint text_quad_vao;
+	GLuint text_quad_vbo;
+	GLuint text_quad_ebo;
+	GLuint skybox_vao;
+	GLuint skybox_vbo;
+	struct texture_list tex_list;
+	struct framebuffer main_fbo;
+	struct framebuffer final_fbo;
+	struct texture *skybox_tex;
+	struct texture *skybox_night_tex;
+	struct texture *current_skybox;
+
+	struct framebuffer picking_fbo;
 };
 
 struct game {
 	void *lib_handle;
-	void (*load_functions)(struct game *, GLADloadproc);
+	void (*load_functions)(struct game *);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
-	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
-	void (*init_renderer)(struct renderer *);
 	void (*init_scene)(struct scene *, struct resources *);
-	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
-	void (*reload_shaders)(struct renderer *);
+};
+
+struct editor {
+	bool show_demo;
+	void *lib_handle;
+	void (*load_functions)(struct editor *);
+	void (*update_editor)(struct editor *);
+	void (*process_event)(SDL_Event *);
+	void (*init_editor)(struct window *, struct editor *);
 };

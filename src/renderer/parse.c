@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "types.h"
+#include "../types.h"
 #include "load.h"
 
 struct token {
@@ -75,33 +75,6 @@ struct token *get_tokens(char *filename, size_t *num_tokens)
 	return tokens;
 }
 
-struct texture *find_texture(struct resources *win, char *name)
-{
-	for (int i = 0; i < win->num_textures; i++) {
-		struct texture *tex = &win->textures[i];
-		if (strcmp(name, tex->name) == 0) {
-			return tex;
-		}
-	}
-
-	return &win->textures[0];
-}
-
-struct material *find_material(struct resources *res, struct renderer *ren, char *mat_name)
-{
-	for (int i = 0; i < res->num_mats; i++) {
-		if (strcmp(res->all_mats[i].name, mat_name) == 0) {
-			return &res->all_mats[i];
-		}
-	}
-
-	snprintf(res->all_mats[res->num_mats].name, 128, "%s", mat_name);
-	res->all_mats[res->num_mats].shader = ren->shader;
-	res->all_mats[res->num_mats].tex = NULL;
-	res->num_mats++;
-	return &res->all_mats[res->num_mats - 1];
-}
-
 // void write_mesh_infos(struct resources *res)
 // {
 // 	FILE *f = fopen("testmeshinfostoo.txt", "w");
@@ -133,7 +106,7 @@ void write_tokens(struct token *tokens, size_t num_tokens)
 }
 
 void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename, struct mesh_info *mesh_infos,
-		       size_t *num_mesh_infos)
+		       size_t *num_mesh_infos, float import_scale)
 {
 	size_t num_tokens = 0;
 	size_t count = 0;
@@ -150,6 +123,7 @@ void create_mesh_infos(struct resources *res, struct renderer *ren, char *filena
 
 			current_mesh_info = &mesh_infos[*num_mesh_infos];
 			current_mesh_info->num_mats = 0;
+			current_mesh_info->import_scale = import_scale;
 			snprintf(current_mesh_info->name, 128, "%s", t->data);
 			*num_mesh_infos += 1;
 
@@ -160,7 +134,10 @@ void create_mesh_infos(struct resources *res, struct renderer *ren, char *filena
 				count += 2;
 				t = &tokens[count];
 
-				current_mat = find_material(res, ren, t->data);
+				current_mat = find_material(res, t->data);
+				if (!current_mat) {
+					get_new_material(res, ren, t->data);
+				}
 				current_mesh_info->mats[current_mesh_info->num_mats] = current_mat;
 				current_mesh_info->num_mats++;
 

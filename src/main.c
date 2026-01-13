@@ -1,90 +1,69 @@
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_mouse.h"
+#include "cglm/types-struct.h"
+#include <dlfcn.h>
+#define CGLM_FORCE_LEFT_HANDED
+#define UFBX_REAL_IS_FLOAT
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_video.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <dlfcn.h>
 #include "arena.h"
 #include "types.h"
-#include "reload.c"
 #include "unistd.h"
+#include "reload.c"
 #include "arena.c"
+
+struct arena main_arena;
+struct arena render_arena;
 
 void window_init(struct window *win, struct input *input)
 {
-	SDL_Init(SDL_INIT_VIDEO);
+	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-	win->sdl_win = SDL_CreateWindow("practice", 800, 600, SDL_WINDOW_OPENGL);
+	SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+	win->sdl_win = SDL_CreateWindow("practice", 800, 600, flags);
 	win->ctx = SDL_GL_CreateContext(win->sdl_win);
 
 	SDL_GL_MakeCurrent(win->sdl_win, win->ctx);
 	SDL_GL_SetSwapInterval(1);
-	input->keyStates = SDL_GetKeyboardState(NULL);
+	SDL_SetWindowPosition(win->sdl_win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	win->should_close = false;
+	win->size.x = 800;
+	win->size.y = 600;
+
+	input->sdl_keys = SDL_GetKeyboardState(NULL);
 	input->lock_mouse = SDL_SetWindowRelativeMouseMode;
-	input->del.state = CANCELED;
-	input->space.state = CANCELED;
-	input->movement.state = CANCELED;
-	input->movement.value_type = COMPOSITE;
-	input->arrows.state = CANCELED;
-	input->arrows.value_type = COMPOSITE;
-	input->mouse_wheel.value_type = BUTTON;
-	input->mouse_wheel.state = CANCELED;
 }
 
-void set_key_state(struct key_state *key, float *value)
-{
-	float activated = 0;
-
-	switch (key->value_type) {
-	case BUTTON:
-		key->value.raw[0] = value[0];
-		break;
-	case AXIS:
-		break;
-	case COMPOSITE:
-		key->value.x = value[0] + value[1];
-		key->value.y = value[2] + value[3];
-		break;
-	}
-
-	activated = key->value.x || key->value.y;
-
-	switch (key->state) {
-	case STARTED:
-		if (!activated) {
-			key->state = CANCELED;
-		} else {
-			key->state = ACTIVE;
-		}
-		break;
-	case ACTIVE:
-		if (!activated)
-			key->state = CANCELED;
-		break;
-	case CANCELED:
-		if (activated)
-			key->state = STARTED;
-		break;
-	}
-}
-
-void poll_events(struct window *win, struct input *input)
+void poll_events(struct window *win, struct input *input, struct renderer *ren, struct editor *editor,
+		 struct arena *ren_arena)
 {
 	SDL_Event event;
 
 	while (SDL_PollEvent(&event)) {
+		editor->process_event(&event);
 		switch (event.type) {
+		case SDL_EVENT_MOUSE_WHEEL:
+			input->actions[MWHEEL].axis = event.wheel.y;
+			break;
+		case SDL_EVENT_WINDOW_RESIZED:
+			win->size.x = event.window.data1;
+			win->size.y = event.window.data2;
+			win->aspect = (float)event.window.data1 / event.window.data2;
+			ren->window_resized(ren, win, ren_arena);
+			break;
+		case SDL_EVENT_QUIT:
+			win->should_close = true;
 		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 			win->should_close = true;
-			break;
-		case SDL_EVENT_MOUSE_WHEEL:
-			set_key_state(&input->mouse_wheel, (float[1]){ event.wheel.y });
 			break;
 		}
 	}
@@ -92,66 +71,48 @@ void poll_events(struct window *win, struct input *input)
 
 void check_input(struct input *input)
 {
+	float oldX = input->cursorPosition.x;
+	float oldY = input->cursorPosition.y;
+
+	SDL_GetMouseState(&input->relativeCursorPosition.x, &input->relativeCursorPosition.y);
 	SDL_MouseButtonFlags mouseButtonMask =
 		SDL_GetGlobalMouseState(&input->cursorPosition.x, &input->cursorPosition.y);
 
-	input->lookX = input->cursorPosition.x - input->oldX;
-	input->lookY = input->oldY - input->cursorPosition.y;
-	input->oldX = input->cursorPosition.x;
-	input->oldY = input->cursorPosition.y;
+	input->actions[MOUSE_DELTA].composite =
+		(vec2s){ input->cursorPosition.x - oldX, oldY - input->cursorPosition.y };
 
-	vec4s v = { 0.0f, 0.0f, 0.0f, 0.0f };
-	set_key_state(&input->mouse_wheel, (float[1]){ 0.0f });
-	set_key_state(&input->mouse0, (float[1]){ mouseButtonMask & SDL_BUTTON_LMASK });
-	set_key_state(&input->mouse1, (float[1]){ mouseButtonMask & SDL_BUTTON_RMASK });
-	set_key_state(&input->del, (float[1]){ input->keyStates[SDL_SCANCODE_DELETE] });
-	set_key_state(&input->space, (float[1]){ input->keyStates[SDL_SCANCODE_SPACE] });
-	set_key_state(&input->left_shift, (float[1]){ input->keyStates[SDL_SCANCODE_LSHIFT] });
-	set_key_state(&input->movement, (float[4]){
-						input->keyStates[SDL_SCANCODE_A],
-						-input->keyStates[SDL_SCANCODE_D],
-						-input->keyStates[SDL_SCANCODE_S],
-						input->keyStates[SDL_SCANCODE_W],
-					});
-	set_key_state(&input->arrows, (float[4]){
-					      input->keyStates[SDL_SCANCODE_LEFT],
-					      -input->keyStates[SDL_SCANCODE_RIGHT],
-					      -input->keyStates[SDL_SCANCODE_DOWN],
-					      input->keyStates[SDL_SCANCODE_UP],
-				      });
-}
+	input->actions[MWHEEL].axis = 0.0f;
+	input->actions[M0].pushed = mouseButtonMask & SDL_BUTTON_LMASK;
+	input->actions[M1].pushed = mouseButtonMask & SDL_BUTTON_RMASK;
+	input->actions[DELETE].pushed = input->sdl_keys[SDL_SCANCODE_DELETE];
+	input->actions[F].pushed = input->sdl_keys[SDL_SCANCODE_F];
+	input->actions[P].pushed = input->sdl_keys[SDL_SCANCODE_P];
+	input->actions[SPACE].pushed = input->sdl_keys[SDL_SCANCODE_SPACE];
+	input->actions[LSHIFT].pushed = input->sdl_keys[SDL_SCANCODE_LSHIFT];
+	input->actions[WASD].composite = (vec2s){ input->sdl_keys[SDL_SCANCODE_D] - input->sdl_keys[SDL_SCANCODE_A],
+						  input->sdl_keys[SDL_SCANCODE_W] - input->sdl_keys[SDL_SCANCODE_S] };
+	input->actions[ARROWS].composite = (vec2s){
+		input->sdl_keys[SDL_SCANCODE_LEFT] - input->sdl_keys[SDL_SCANCODE_RIGHT],
+		input->sdl_keys[SDL_SCANCODE_DOWN] - input->sdl_keys[SDL_SCANCODE_UP],
+	};
 
-void load_lib(struct game *game)
-{
-	char *error;
-	const char *compile_command =
-		"clang -g -fPIC -c ../../src/game.c -I../../../cglm/include -I../../../freetype/include -I../../../glad/include -I../../../cglm/include -I../../../SDL/include -o game.o";
-	const char *link_command = "clang -shared game.o -L../../lib/lin -lfreetype -lSDL3 -lm -o libgamelib.so";
+	for (int i = 0; i < ACTION_COUNT; i++) {
+		struct key_action *action = &input->actions[i];
 
-	if (game->lib_handle != NULL) {
-		dlclose(game->lib_handle);
+		switch (action->state) {
+		case STARTED:
+			action->state = action->pushed ? ACTIVE : CANCELED;
+			break;
+		case ACTIVE:
+			if (!action->pushed)
+				action->state = CANCELED;
+			break;
+		case CANCELED:
+			if (action->pushed)
+				action->state = STARTED;
+			break;
+		}
 	}
-
-	//need to actually handle status.
-	int status = system(compile_command);
-	status = system(link_command);
-	game->lib_handle = dlopen("./libgamelib.so", RTLD_LAZY);
-
-	if (!game->lib_handle) {
-		printf("handle error\n");
-		fprintf(stderr, "%s\n", dlerror());
-		exit(EXIT_FAILURE);
-	}
-
-	game->load_functions = dlsym(game->lib_handle, "load_game_functions");
-
-	if ((error = dlerror()) != NULL) {
-		printf("dlsym error\n");
-		fprintf(stderr, "%s\n", error);
-		exit(EXIT_FAILURE);
-	}
-
-	game->load_functions(game, (GLADloadproc)SDL_GL_GetProcAddress);
 }
 
 void update_time(struct scene *scene)
@@ -163,42 +124,50 @@ void update_time(struct scene *scene)
 
 int main()
 {
-	struct arena *arena = get_new_arena((size_t)1 << 32);
-
-	struct notify *notify = alloc_struct(arena, typeof(*notify), 1);
-	struct game *game = alloc_struct(arena, typeof(*game), 1);
-	struct window *win = alloc_struct(arena, typeof(*win), 1);
-	struct input *input = alloc_struct(arena, typeof(*input), 1);
-	struct resources *res = alloc_struct(arena, typeof(*res), 1);
-	struct renderer *renderer = alloc_struct(arena, typeof(*renderer), 1);
-	struct scene *scene = alloc_struct(arena, typeof(*scene), 1);
+	main_arena = get_new_arena((size_t)1 << 30);
+	render_arena = get_new_arena((size_t)1 << 30);
+	struct notify *notify = alloc_struct(&main_arena, typeof(*notify), 1);
+	struct game *game = alloc_struct(&main_arena, typeof(*game), 1);
+	struct window *win = alloc_struct(&main_arena, typeof(*win), 1);
+	struct input *input = alloc_struct(&main_arena, typeof(*input), 1);
+	struct resources *res = alloc_struct(&main_arena, typeof(*res), 1);
+	struct renderer *renderer = alloc_struct(&main_arena, typeof(*renderer), 1);
+	struct scene *scene = alloc_struct(&main_arena, typeof(*scene), 1);
+	struct editor *editor = alloc_struct(&main_arena, typeof(*editor), 1);
 
 	game->lib_handle = NULL;
-	scene->entities = alloc_struct(arena, typeof(*scene->entities), 4096);
-	scene->cameras = alloc_struct(arena, typeof(*scene->cameras), 32);
-	scene->transforms = alloc_struct(arena, typeof(*scene->transforms), 4096);
-	scene->renderers = alloc_struct(arena, typeof(*scene->renderers), 4096);
+	renderer->lib_handle = NULL;
+	renderer->win = win;
+	scene->entities = alloc_struct(&main_arena, typeof(*scene->entities), 4096);
+	scene->cameras = alloc_struct(&main_arena, typeof(*scene->cameras), 32);
+	scene->transforms = alloc_struct(&main_arena, typeof(*scene->transforms), 4096);
+	scene->renderers = alloc_struct(&main_arena, typeof(*scene->renderers), 4096);
 
 	window_init(win, input);
-	load_lib(game);
-	notify_init(notify, game, renderer);
+	load_renderer(renderer, res, &render_arena);
+	renderer->input = input;
+	load_game_lib(game);
+	load_editor_lib(editor);
+	notify_init(notify);
 
-	game->init_renderer(renderer);
-	game->load_resources(res, renderer, arena);
+	renderer->init_renderer(renderer, &render_arena, win);
+	renderer->load_resources(res, renderer, &render_arena);
 	game->init_scene(scene, res);
+	editor->init_editor(win, editor);
 
 	while (!win->should_close) {
-		// check_modified(game, win, input, renderer);
-		check_modified(notify, game, renderer);
+		check_modified(notify, game, renderer, res, &main_arena, &render_arena, win);
 		update_time(scene);
 		check_input(input);
-		poll_events(win, input);
+		poll_events(win, input, renderer, editor, &render_arena);
 		game->update(scene, input, res, renderer, win);
-		game->draw_scene(renderer, res, scene, win);
+		renderer->draw_scene(renderer, res, scene, win);
+		editor->update_editor(editor);
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
 
 	close(notify->notify_fd);
 	dlclose(game->lib_handle);
+	dlclose(renderer->lib_handle);
 	return 0;
 }
