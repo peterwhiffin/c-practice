@@ -437,6 +437,7 @@ struct material *get_new_material(struct resources *res, struct renderer *ren, c
 	snprintf(res->all_mats[res->num_mats].name, 128, "%s", mat_name);
 	res->all_mats[res->num_mats].shader = ren->default_shader;
 	res->all_mats[res->num_mats].tex = NULL;
+	res->all_mats[res->num_mats].color = (vec4s){ 1.0f, 1.0f, 1.0f, 1.0f };
 	res->num_mats++;
 	return &res->all_mats[res->num_mats - 1];
 }
@@ -719,6 +720,7 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 	snprintf(res->default_mat->name, 256, "%s", "default");
 	res->default_mat->tex = &res->white_tex;
 	res->default_mat->shader = ren->default_shader;
+	res->default_mat->color = (vec4s){ 1.0f, 1.0f, 1.0f, 1.0f };
 	res->default_mesh_info = &res->mesh_infos[res->num_mesh_infos];
 	res->num_mesh_infos++;
 	snprintf(res->default_mesh_info->name, 256, "%s", "default");

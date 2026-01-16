@@ -12,23 +12,90 @@
 #include "./imgui_impl_sdl3.h"
 #include "./imgui_impl_opengl3.h"
 #include "SDL3/SDL_events.h"
-// #define NO_GLAD
+#include "cglm/struct/euler.h"
+#include "cglm/struct/quat.h"
+#include "cglm/types-struct.h"
+#include "cglm/types.h"
+#include "cglm/util.h"
+
+void inspector_draw_entity(struct editor *editor, struct entity *e)
+{
+	ImGui::Text("%s", e->name);
+	mat4s rot_mat = glms_quat_mat4(e->transform->rot);
+	vec3s rot = glms_euler_angles(rot_mat);
+
+	rot.x = glm_deg(rot.x);
+	rot.y = glm_deg(rot.y);
+	rot.z = glm_deg(rot.z);
+
+	ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f);
+	ImGui::DragFloat3("rot", &rot.x, 0.01f);
+	ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f);
+
+	rot.x = glm_rad(rot.x);
+	rot.y = glm_rad(rot.y);
+	rot.z = glm_rad(rot.z);
+
+	e->transform->rot = glms_euler_xyz_quat(rot);
+
+	if (e->camera) {
+		bool open = ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen);
+		if (open) {
+			float fov_deg = glm_deg(e->camera->fov);
+			ImGui::DragFloat("FOV", &fov_deg, 0.01f);
+			ImGui::DragFloat("near", &e->camera->near);
+			ImGui::DragFloat("far", &e->camera->far);
+			e->camera->fov = glm_rad(fov_deg);
+		}
+	}
+
+	if (e->renderer) {
+		bool open = ImGui::CollapsingHeader("Renderer", ImGuiTreeNodeFlags_DefaultOpen);
+		if (open) {
+			ImGui::Text("%s", e->renderer->mesh->name);
+		}
+
+		open = ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen);
+		if (open) {
+			ImGui::ColorPicker4("base color", &e->renderer->mesh->sub_meshes[0].mat->color.r);
+			ImGui::Image(e->renderer->mesh->sub_meshes[0].mat->tex->id, ImVec2(50, 50));
+		}
+	}
+}
+
+void draw_hierarchy(struct editor *editor)
+{
+	ImGui::Begin("hierarchy");
+
+	for (int i = 0; i < editor->scene->num_entities; i++) {
+		struct entity *e = &editor->scene->entities[i];
+		bool selected = e == editor->selected_entity ? true : false;
+		if (ImGui::Selectable(e->name, selected)) {
+			editor->selected_entity = e;
+		}
+	}
+
+	ImGui::End();
+}
+
+void draw_inspector(struct editor *editor)
+{
+	ImGui::Begin("inspector");
+	if (editor->selected_entity) {
+		inspector_draw_entity(editor, editor->selected_entity);
+	}
+	ImGui::End();
+}
 
 void update_editor(struct editor *editor)
 {
 	ImGui_ImplOpenGL3_NewFrame();
-	// ImGui_ImplGlfw_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 	ImGui::ShowDemoWindow(&editor->show_demo);
-	// updateScenePanel(editor);
-	// updatePlayPanel(editor);
-	// drawEnvironmentSettings(editor);
-	// drawProjectPanel(editor);
-	// drawInspector(editor);
-	// drawHierarchy(editor);
-	// drawDebugPanel(editor);
+	draw_hierarchy(editor);
+	draw_inspector(editor);
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	ImGui::EndFrame();

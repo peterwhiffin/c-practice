@@ -51,6 +51,7 @@ struct entity *get_new_entity(struct scene *scene)
 	e->id = scene->next_id++;
 	printf("ent id: %i\n", e->id);
 	e->transform = add_transform(scene, e);
+	snprintf(e->name, 128, "%s %u", "Entity", e->id);
 	scene->num_entities++;
 	return e;
 }
@@ -113,7 +114,7 @@ void update(struct scene *scene, struct input *input, struct resources *res, str
 		versors currentRot = mr->entity->transform->rot;
 		versors addRot = glms_quat(GLM_PI_4 * scene->dt * i, 0.0f, 1.0f, 0.0f);
 		versors newRot = glms_quat_mul(currentRot, addRot);
-		set_rotation(mr->entity->transform, newRot);
+		set_rotation(mr->entity->transform, currentRot);
 	}
 
 	update_cameras(scene);

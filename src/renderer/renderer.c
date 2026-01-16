@@ -107,7 +107,6 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 		glUniformMatrix4fv(13, 1, GL_FALSE, &mr->entity->transform->world_transform.m00);
 		glUniform1f(12, ren->light_active);
 		glUniform1f(23, scene->time);
-		glUniform4fv(10, 1, &white.x);
 
 		glStencilMask(0x00);
 		glStencilFunc(GL_ALWAYS, 1, 0xFF);
@@ -116,6 +115,8 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 			struct sub_mesh *sm = &mr->mesh->sub_meshes[i];
 
 			glBindTextureUnit(0, sm->mat->tex->id);
+
+			glUniform4fv(10, 1, &sm->mat->color.r);
 			glBindVertexArray(sm->vao);
 			glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
 		}

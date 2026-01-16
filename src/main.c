@@ -131,43 +131,49 @@ int main()
 	struct window *win = alloc_struct(&main_arena, typeof(*win), 1);
 	struct input *input = alloc_struct(&main_arena, typeof(*input), 1);
 	struct resources *res = alloc_struct(&main_arena, typeof(*res), 1);
-	struct renderer *renderer = alloc_struct(&main_arena, typeof(*renderer), 1);
+	struct renderer *ren = alloc_struct(&main_arena, typeof(*ren), 1);
 	struct scene *scene = alloc_struct(&main_arena, typeof(*scene), 1);
 	struct editor *editor = alloc_struct(&main_arena, typeof(*editor), 1);
 
 	game->lib_handle = NULL;
-	renderer->lib_handle = NULL;
-	renderer->win = win;
+	ren->lib_handle = NULL;
+	ren->win = win;
+	ren->input = input;
 	scene->entities = alloc_struct(&main_arena, typeof(*scene->entities), 4096);
 	scene->cameras = alloc_struct(&main_arena, typeof(*scene->cameras), 32);
 	scene->transforms = alloc_struct(&main_arena, typeof(*scene->transforms), 4096);
 	scene->renderers = alloc_struct(&main_arena, typeof(*scene->renderers), 4096);
+	editor->ren = ren;
+	editor->res = res;
+	editor->input = input;
+	editor->win = win;
+	editor->scene = scene;
+	editor->game = game;
 
 	window_init(win, input);
-	load_renderer(renderer, res, &render_arena);
-	renderer->input = input;
+	load_renderer(ren, res, &render_arena);
 	load_game_lib(game);
 	load_editor_lib(editor);
 	notify_init(notify);
 
-	renderer->init_renderer(renderer, &render_arena, win);
-	renderer->load_resources(res, renderer, &render_arena);
+	ren->init_renderer(ren, &render_arena, win);
+	ren->load_resources(res, ren, &render_arena);
 	game->init_scene(scene, res);
 	editor->init_editor(win, editor);
 
 	while (!win->should_close) {
-		check_modified(notify, game, renderer, res, &main_arena, &render_arena, win);
+		check_modified(notify, game, ren, res, &main_arena, &render_arena, win);
 		update_time(scene);
 		check_input(input);
-		poll_events(win, input, renderer, editor, &render_arena);
-		game->update(scene, input, res, renderer, win);
-		renderer->draw_scene(renderer, res, scene, win);
+		poll_events(win, input, ren, editor, &render_arena);
+		game->update(scene, input, res, ren, win);
+		ren->draw_scene(ren, res, scene, win);
 		editor->update_editor(editor);
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
 
 	close(notify->notify_fd);
 	dlclose(game->lib_handle);
-	dlclose(renderer->lib_handle);
+	dlclose(ren->lib_handle);
 	return 0;
 }

@@ -6,10 +6,7 @@
 #include <time.h>
 #include "SDL3/SDL_events.h"
 #include "cglm/types-struct.h"
-#ifdef NO_GLAD
-#else
 #include "glad/glad.h"
-#endif
 #include "ft2build.h"
 #include "renderer/ufbx.h"
 #include FT_FREETYPE_H
@@ -101,6 +98,7 @@ struct texture {
 struct material {
 	char name[256];
 	GLuint shader;
+	vec4s color;
 	struct texture *tex;
 };
 
@@ -191,6 +189,7 @@ struct window {
 
 struct entity {
 	u32 id;
+	char name[128];
 	struct transform *transform;
 	struct mesh_renderer *renderer;
 	struct camera *camera;
@@ -280,6 +279,13 @@ struct game {
 };
 
 struct editor {
+	struct game *game;
+	struct scene *scene;
+	struct renderer *ren;
+	struct window *win;
+	struct resources *res;
+	struct input *input;
+	struct entity *selected_entity;
 	bool show_demo;
 	void *lib_handle;
 	void (*load_functions)(struct editor *);
