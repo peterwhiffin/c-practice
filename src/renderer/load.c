@@ -1,19 +1,10 @@
-#include "../arena.h"
-// #include "cglm/struct/vec3-ext.h"
-// #include "cglm/struct/vec3.h"
-#include "cglm/types-struct.h"
-#include "freetype/freetype.h"
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "../types.h"
+#include "../arena.h"
+#include "freetype/freetype.h"
 #include "load.h"
-#include "stdio.h"
-#include <dirent.h>
-#include "ufbx.h"
-#include "parse.h"
 #include "stb_image.h"
+#include "file.h"
 
 float quad_verts[16] = {
 	// clang-format off
@@ -80,22 +71,6 @@ float skybox_verts[] = {
       1.0f, -1.0f, 1.0f
 	// clang-format on
 };
-
-const char *read_file(char *filename)
-{
-	long len;
-	FILE *f = fopen(filename, "r");
-	char *str;
-	fseek(f, 0, SEEK_END);
-	len = ftello(f);
-	fseek(f, 0, SEEK_SET);
-	str = malloc(len + 1);
-	fread(str, sizeof(char), len, f);
-	str[len] = '\0';
-	fclose(f);
-
-	return str;
-}
 
 void checkShader(GLuint shader, const char *name)
 {
@@ -321,84 +296,6 @@ exit:
 	stbi_image_free(data);
 }
 
-void get_extension(char *ext, char *path)
-{
-	char *dot = strrchr(path, '.');
-	snprintf(ext, 256, "%s", dot + 1);
-}
-
-void get_filename(char *name, const char *path)
-{
-	char *slash = strrchr(path, '/');
-	snprintf(name, 256, "%s", slash + 1);
-}
-
-void get_filename_no_ext(char *name, const char *path)
-{
-	char file_name[256];
-	get_filename(file_name, path);
-
-	char *dot = strrchr(file_name, '.');
-	*dot = '\0';
-
-	char *under = strrchr(file_name, '_');
-
-	if (under && strcmp(under + 1, "TOM") == 0) {
-		*under = '\0';
-	}
-
-	snprintf(name, 256, "%s", file_name);
-}
-
-void get_resource_files(char *path, struct file_info *model_files, struct file_info *texture_files, size_t *model_count,
-			size_t *texture_count)
-{
-	char full_path[256];
-	char extension[128];
-	char file_name[128];
-	char name[128];
-
-	DIR *dir_stream;
-	struct file_info *file_info;
-	struct dirent *dir;
-
-	dir_stream = opendir(path);
-
-	while ((dir = readdir(dir_stream)) != NULL) {
-		sprintf(full_path, "%s%s", path, dir->d_name);
-
-		if (dir->d_type == DT_DIR) {
-			if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
-				sprintf(full_path, "%s/", full_path);
-				get_resource_files(full_path, model_files, texture_files, model_count, texture_count);
-			}
-
-		} else if (dir->d_type == DT_REG) {
-			sprintf(full_path, "%s", full_path);
-			get_extension(extension, full_path);
-			get_filename(file_name, full_path);
-			get_filename_no_ext(name, full_path);
-
-			if (strcmp(extension, "fbx") == 0) {
-				file_info = &model_files[*model_count];
-				*model_count = *model_count + 1;
-			} else if (strcmp(extension, "png") == 0) {
-				file_info = &texture_files[*texture_count];
-				*texture_count = *texture_count + 1;
-			} else {
-				continue;
-			}
-
-			snprintf(file_info->path, 256, "%s", full_path);
-			snprintf(file_info->extension, 128, "%s", extension);
-			snprintf(file_info->filename, 128, "%s", file_name);
-			snprintf(file_info->name, 128, "%s", name);
-		}
-	}
-
-	closedir(dir_stream);
-}
-
 struct mesh_info *get_mesh_info(struct resources *res, const char *name)
 {
 	struct mesh_info *mesh_info = NULL;
@@ -521,9 +418,20 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 				ufbx_vec3 pos = ufbx_get_vertex_vec3(&node_mesh->vertex_position, index);
 				ufbx_vec3 normal = ufbx_get_vertex_vec3(&node_mesh->vertex_normal, index);
 				ufbx_vec2 uv = ufbx_get_vertex_vec2(&node_mesh->vertex_uv, index);
-				v->pos.x = pos.x * scale;
-				v->pos.y = pos.y * scale;
-				v->pos.z = pos.z * scale;
+				// v->pos.x = pos.x * scale;
+				// v->pos.y = pos.y * scale;
+				// v->pos.z = pos.z * scale;
+
+				v->pos.x = pos.x;
+				v->pos.y = pos.y;
+				v->pos.z = pos.z;
+				vec4s vert = (vec4s){ v->pos.x, v->pos.y, v->pos.z, 1.0f };
+				mat4x3s mat43 = glms_mat4x3_make(&node->node_to_world.m00);
+				vec3s vert2 = glms_mat4x3_mulv(mat43, vert);
+				v->pos.x = vert2.x;
+				v->pos.y = vert2.y;
+				v->pos.z = vert2.z;
+
 				v->normal.x = normal.x;
 				v->normal.y = normal.y;
 				v->normal.z = normal.z;

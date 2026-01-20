@@ -10,7 +10,7 @@ struct token {
 	char data[128];
 };
 
-struct token *get_tokens(char *filename, size_t *num_tokens)
+struct token *mesh_info_get_tokens(char *filename, size_t *num_tokens)
 {
 	size_t token_index = 0;
 	size_t str_index = 0;
@@ -93,17 +93,17 @@ struct token *get_tokens(char *filename, size_t *num_tokens)
 // 	fclose(f);
 // }
 
-void write_tokens(struct token *tokens, size_t num_tokens)
-{
-	FILE *f = fopen("tokentest.txt", "w");
-
-	for (int i = 0; i < num_tokens; i++) {
-		struct token *t = &tokens[i];
-		fprintf(f, "token: %s\n", t->data);
-	}
-
-	fclose(f);
-}
+// void write_tokens(struct token *tokens, size_t num_tokens)
+// {
+// 	FILE *f = fopen("tokentest.txt", "w");
+//
+// 	for (int i = 0; i < num_tokens; i++) {
+// 		struct token *t = &tokens[i];
+// 		fprintf(f, "token: %s\n", t->data);
+// 	}
+//
+// 	fclose(f);
+// }
 
 void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename, struct mesh_info *mesh_infos,
 		       size_t *num_mesh_infos, float import_scale)
@@ -112,7 +112,7 @@ void create_mesh_infos(struct resources *res, struct renderer *ren, char *filena
 	size_t count = 0;
 	struct mesh_info *current_mesh_info;
 	struct material *current_mat;
-	struct token *tokens = get_tokens(filename, &num_tokens);
+	struct token *tokens = mesh_info_get_tokens(filename, &num_tokens);
 
 	while (count < num_tokens) {
 		struct token *t = &tokens[count];

@@ -3,6 +3,12 @@
 #include "cglm/types-struct.h"
 #include "glad.c"
 #include "ufbx.c"
+#if defined(_WIN32)
+#include "file_win.c"
+#elif defined(__linux__)
+#include "file_lin.c"
+#endif
+#include "../arena.c"
 #include "load.c"
 #include "parse.c"
 #include <stdio.h>
@@ -41,10 +47,12 @@ void draw_text(struct renderer *ren, struct resources *res, const char *text, si
 
 void draw_fullscreen_quad(struct renderer *ren)
 {
-	glViewport(0, 0, ren->win->size.x, ren->win->size.y);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glClearNamedFramebufferfv(0, GL_COLOR, 0, &ren->clear_color[0]);
-	glClearNamedFramebufferfv(0, GL_DEPTH, 0, &ren->clear_depth);
+	// glViewport(0, 0, ren->win->size.x, ren->win->size.y);
+	glViewport(0, 0, ren->final_fbo.width, ren->final_fbo.height);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, ren->final_fbo.id);
+	glClearNamedFramebufferfv(ren->final_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
+	glClearNamedFramebufferfv(ren->final_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
 	glUseProgram(ren->fullscreen_shader);
 	vec2s res = (vec2s){ 800, 600 };
 	glUniform2fv(13, 1, &res.x);
@@ -52,6 +60,10 @@ void draw_fullscreen_quad(struct renderer *ren)
 	glBindTextureUnit(0, ren->main_fbo.targets.id);
 	glBindVertexArray(ren->quad_vao);
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glClearNamedFramebufferfv(0, GL_COLOR, 0, &ren->clear_color[0]);
+	glClearNamedFramebufferfv(0, GL_DEPTH, 0, &ren->clear_depth);
 }
 
 void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win)
@@ -163,12 +175,12 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	// glEnable(GL_SCISSOR_TEST);
 	// glScissor(200, 600 / 4, 400, 300);
 	//
-	for (int i = 0; i < res->num_meshes; i++) {
-		draw_text(ren, res, res->meshes[i].name, strlen(res->meshes[i].name), xPos,
-			  yPos + scene->text_offset * 20, 0.3f);
+	// for (int i = 0; i < res->num_meshes; i++) {
+	// 	draw_text(ren, res, res->meshes[i].name, strlen(res->meshes[i].name), xPos,
+	// 		  yPos + scene->text_offset * 20, 0.3f);
 
-		yPos -= 40;
-	}
+	// 	yPos -= 40;
+	// }
 	//
 	// glDisable(GL_SCISSOR_TEST);
 
@@ -224,7 +236,7 @@ void init_renderer(struct renderer *ren, struct arena *arena, struct window *win
 	// ren->main_fbo.targets = get_texture(ren, arena);
 	struct texture *tex = &ren->main_fbo.targets;
 
-	ren->clear_color[0] = 0.0f;
+	ren->clear_color[0] = 1.0f;
 	ren->clear_color[1] = 0.0f;
 	ren->clear_color[2] = 0.0f;
 	ren->clear_color[3] = 1.0f;
@@ -246,9 +258,23 @@ void init_renderer(struct renderer *ren, struct arena *arena, struct window *win
 	tex->wrap_type = GL_CLAMP_TO_EDGE;
 
 	ren->final_fbo.width = 800;
-	ren->final_fbo.height = 800;
+	ren->final_fbo.height = 600;
+	ren->final_fbo.rb.attachment = GL_DEPTH_ATTACHMENT;
+	ren->final_fbo.rb.internal_format = GL_DEPTH_COMPONENT16;
+	ren->final_fbo.num_targets = 1;
+
+	tex = &ren->final_fbo.targets;
+	tex->format = GL_RGBA;
+	tex->internal_format = GL_RGBA8;
+	tex->width = ren->final_fbo.width;
+	tex->height = ren->final_fbo.height;
+	tex->mips = false;
+	tex->filter_type = GL_NEAREST;
+	tex->wrap_type = GL_CLAMP_TO_EDGE;
 
 	create_framebuffer(ren, &ren->main_fbo);
+	create_framebuffer(ren, &ren->final_fbo);
+
 	glUseProgram(ren->text_shader);
 	glUniformMatrix4fv(4, 1, GL_FALSE, &ren->text_proj.m00);
 	glUseProgram(ren->default_shader);
@@ -275,6 +301,7 @@ void delete_framebuffer(struct framebuffer *fbo, struct renderer *ren)
 void reload_renderer(struct renderer *ren, struct resources *res, struct arena *arena, struct window *win)
 {
 	delete_framebuffer(&ren->main_fbo, ren);
+	delete_framebuffer(&ren->final_fbo, ren);
 	init_renderer(ren, arena, win);
 }
 
@@ -296,7 +323,7 @@ void window_resized(struct renderer *ren, struct window *win, struct arena *aren
 	// create_framebuffer(ren, &ren->main_fbo);
 }
 
-void load_functions(struct renderer *ren, GLADloadproc load)
+PETE_API void load_functions(struct renderer *ren, GLADloadproc load)
 {
 	ren->init_renderer = init_renderer;
 	ren->reload_renderer = reload_renderer;

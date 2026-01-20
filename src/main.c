@@ -1,7 +1,6 @@
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_mouse.h"
 #include "cglm/types-struct.h"
-#include <dlfcn.h>
 #define CGLM_FORCE_LEFT_HANDED
 #define UFBX_REAL_IS_FLOAT
 #include "SDL3/SDL_events.h"
@@ -12,8 +11,12 @@
 #include <stdlib.h>
 #include "arena.h"
 #include "types.h"
-#include "unistd.h"
+
+#if defined(_WIN32)
+#include "reload_win.c"
+#elif defined(__linux__)
 #include "reload.c"
+#endif
 #include "arena.c"
 
 struct arena main_arena;
@@ -84,11 +87,13 @@ void check_input(struct input *input)
 	input->actions[MWHEEL].axis = 0.0f;
 	input->actions[M0].pushed = mouseButtonMask & SDL_BUTTON_LMASK;
 	input->actions[M1].pushed = mouseButtonMask & SDL_BUTTON_RMASK;
-	input->actions[DELETE].pushed = input->sdl_keys[SDL_SCANCODE_DELETE];
+	input->actions[DEL].pushed = input->sdl_keys[SDL_SCANCODE_DELETE];
+	input->actions[D].pushed = input->sdl_keys[SDL_SCANCODE_D];
 	input->actions[F].pushed = input->sdl_keys[SDL_SCANCODE_F];
 	input->actions[P].pushed = input->sdl_keys[SDL_SCANCODE_P];
 	input->actions[SPACE].pushed = input->sdl_keys[SDL_SCANCODE_SPACE];
 	input->actions[LSHIFT].pushed = input->sdl_keys[SDL_SCANCODE_LSHIFT];
+	input->actions[LCTRL].pushed = input->sdl_keys[SDL_SCANCODE_LCTRL];
 	input->actions[WASD].composite = (vec2s){ input->sdl_keys[SDL_SCANCODE_D] - input->sdl_keys[SDL_SCANCODE_A],
 						  input->sdl_keys[SDL_SCANCODE_W] - input->sdl_keys[SDL_SCANCODE_S] };
 	input->actions[ARROWS].composite = (vec2s){
@@ -151,10 +156,10 @@ int main()
 	editor->game = game;
 
 	window_init(win, input);
-	load_renderer(ren, res, &render_arena);
+	load_renderer(ren);
 	load_game_lib(game);
 	load_editor_lib(editor);
-	notify_init(notify);
+	file_watch_init(notify);
 
 	ren->init_renderer(ren, &render_arena, win);
 	ren->load_resources(res, ren, &render_arena);
@@ -162,7 +167,7 @@ int main()
 	editor->init_editor(win, editor);
 
 	while (!win->should_close) {
-		check_modified(notify, game, ren, res, &main_arena, &render_arena, win);
+		check_modified(notify, game, ren, res, &main_arena, &render_arena, win, editor);
 		update_time(scene);
 		check_input(input);
 		poll_events(win, input, ren, editor, &render_arena);
@@ -172,8 +177,9 @@ int main()
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
 
-	close(notify->notify_fd);
-	dlclose(game->lib_handle);
-	dlclose(ren->lib_handle);
+	file_watch_close(notify->notify_fd);
+	close_lib(game->lib_handle);
+	close_lib(ren->lib_handle);
+	close_lib(editor->lib_handle);
 	return 0;
 }

@@ -11,4 +11,4 @@ target_include_directories(dummy PRIVATE
     "${CMAKE_SOURCE_DIR}/../glad/include"
 )
 
-target_compile_definitions(dummy PRIVATE HOT)
+target_compile_definitions(dummy PRIVATE HOT UFBX_REAL_IS_FLOAT)

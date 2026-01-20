@@ -6,7 +6,11 @@
 #include <time.h>
 #include "SDL3/SDL_events.h"
 #include "cglm/types-struct.h"
+#include "cglm/types.h"
+#ifdef NO_GLAD
+#else
 #include "glad/glad.h"
+#endif
 #include "ft2build.h"
 #include "renderer/ufbx.h"
 #include FT_FREETYPE_H
@@ -14,6 +18,10 @@
 #include "SDL3/SDL.h"
 
 #define SHADER_PATH "../../src/shaders/"
+#define PETE_API
+#if defined(_WIN32)
+#define PETE_API __declspec(dllexport)
+#endif
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -37,6 +45,7 @@ struct transform {
 	vec3s pos;
 	versors rot;
 	vec3s scale;
+	vec3s euler_angles;
 	mat4s world_transform;
 };
 
@@ -46,8 +55,8 @@ struct camera {
 	mat4s view;
 	mat4s viewProj;
 	float fov;
-	float near;
-	float far;
+	float near_plane;
+	float far_plane;
 };
 
 enum action_type { BUTTON, AXIS, COMPOSITE };
@@ -64,7 +73,23 @@ struct key_action {
 	};
 };
 
-enum key_actions { MWHEEL = 0, MOUSE_DELTA, WASD, ARROWS, M0, M1, SPACE, LSHIFT, DELETE, F, P, ESC, ACTION_COUNT };
+enum key_actions {
+	MWHEEL = 0,
+	MOUSE_DELTA,
+	WASD,
+	ARROWS,
+	M0,
+	M1,
+	SPACE,
+	LSHIFT,
+	LCTRL,
+	DEL,
+	D,
+	F,
+	P,
+	ESC,
+	ACTION_COUNT
+};
 
 struct input {
 	bool (*lock_mouse)(SDL_Window *, bool);
@@ -231,7 +256,7 @@ struct texture_list {
 
 struct renderer {
 	void *lib_handle;
-	void (*load_functions)(struct renderer *, GLADloadproc);
+	void (*load_functions)(struct renderer *, void *);
 	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
 	void (*window_resized)(struct renderer *, struct window *, struct arena *);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
@@ -276,6 +301,7 @@ struct game {
 	void (*load_functions)(struct game *);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
 	void (*init_scene)(struct scene *, struct resources *);
+	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
 };
 
 struct editor {
@@ -287,6 +313,9 @@ struct editor {
 	struct input *input;
 	struct entity *selected_entity;
 	bool show_demo;
+
+	vec2s image_size;
+	vec2s image_pos;
 	void *lib_handle;
 	void (*load_functions)(struct editor *);
 	void (*update_editor)(struct editor *);

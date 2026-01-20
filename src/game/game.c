@@ -4,6 +4,7 @@
 #include "cglm/types.h"
 #include "transform.h"
 #include <math.h>
+#include <string.h>
 #define CGLM_FORCE_LEFT_HANDED
 
 #define UFBX_REAL_IS_FLOAT
@@ -27,8 +28,8 @@ static struct transform *add_transform(struct scene *scene, struct entity *entit
 struct camera *add_camera(struct scene *scene, struct entity *entity)
 {
 	struct camera *c = &scene->cameras[scene->num_cameras];
-	c->near = 0.1f;
-	c->far = 1000.0f;
+	c->near_plane = 0.1f;
+	c->far_plane = 1000.0f;
 	c->fov = glm_rad(78.0f);
 	entity->camera = c;
 	c->entity = entity;
@@ -56,11 +57,29 @@ struct entity *get_new_entity(struct scene *scene)
 	return e;
 }
 
+struct entity *entity_duplicate(struct scene *scene, struct entity *e)
+{
+	struct entity *new_entity = get_new_entity(scene);
+	memcpy(new_entity->transform, e->transform, sizeof(struct transform));
+
+	if (e->camera) {
+		add_camera(scene, new_entity);
+		memcpy(new_entity->camera, e->camera, sizeof(struct camera));
+		new_entity->camera->entity = new_entity;
+	}
+
+	if (e->renderer) {
+		add_renderer(scene, new_entity)->mesh = e->renderer->mesh;
+	}
+
+	return new_entity;
+}
+
 void update_cameras(struct scene *scene)
 {
 	for (int i = 0; i < scene->num_cameras; i++) {
 		struct camera *cam = &scene->cameras[i];
-		cam->proj = glms_perspective(cam->fov, 800.0f / 600.0f, cam->near, cam->far);
+		cam->proj = glms_perspective(cam->fov, 800.0f / 600.0f, cam->near_plane, cam->far_plane);
 		cam->view = glms_lookat(cam->entity->transform->pos,
 					glms_vec3_add(cam->entity->transform->pos, get_forward(cam->entity->transform)),
 					get_up(cam->entity->transform));
@@ -97,24 +116,16 @@ void update(struct scene *scene, struct input *input, struct resources *res, str
 					       glms_vec3_scale(right, -input->actions[WASD].composite.x));
 
 		vec3s new_pos = glms_vec3_add(scene->scene_cam->transform->pos,
-					      glms_vec3_scale(move_dir, scene->move_speed * 20.0f * scene->dt));
+					      glms_vec3_scale(move_dir, scene->move_speed * scene->dt));
 		set_position(scene->scene_cam->transform, new_pos);
 	}
 
-	if (input->actions[DELETE].state == STARTED) {
+	if (input->actions[DEL].state == STARTED) {
 		scene->draw_mode = scene->draw_mode == GL_FILL ? GL_LINE : GL_FILL;
 	}
 
 	if (input->actions[P].state == STARTED) {
 		ren->current_skybox = ren->current_skybox == ren->skybox_tex ? ren->skybox_night_tex : ren->skybox_tex;
-	}
-
-	for (int i = 0; i < scene->num_renderers; i++) {
-		struct mesh_renderer *mr = &scene->renderers[i];
-		versors currentRot = mr->entity->transform->rot;
-		versors addRot = glms_quat(GLM_PI_4 * scene->dt * i, 0.0f, 1.0f, 0.0f);
-		versors newRot = glms_quat_mul(currentRot, addRot);
-		set_rotation(mr->entity->transform, currentRot);
 	}
 
 	update_cameras(scene);
@@ -135,8 +146,8 @@ void init_scene(struct scene *scene, struct resources *res)
 	add_camera(scene, scene->scene_cam);
 	set_position(scene->scene_cam->transform, (vec3s){ 0.0f, 0.0f, -10.0f });
 	scene->scene_cam->camera->fov = glm_rad(79.0f);
-	scene->scene_cam->camera->near = 0.1f;
-	scene->scene_cam->camera->far = 1000.0f;
+	scene->scene_cam->camera->near_plane = 0.1f;
+	scene->scene_cam->camera->far_plane = 1000.0f;
 
 	for (int i = 0; i < res->num_meshes; i++) {
 		struct entity *e = get_new_entity(scene);
@@ -145,8 +156,9 @@ void init_scene(struct scene *scene, struct resources *res)
 	}
 }
 
-void load_game_functions(struct game *game, GLADloadproc load)
+PETE_API void load_functions(struct game *game, GLADloadproc load)
 {
 	game->init_scene = init_scene;
 	game->update = update;
+	game->entity_duplicate = entity_duplicate;
 }

@@ -1,4 +1,4 @@
 #pragma once
-#include "types.h"
+#include "../types.h"
 
 void load_game_functions(struct game *game);

@@ -10,3 +10,5 @@ vec3s get_right(struct transform *t);
 void set_position(struct transform *t, vec3s pos);
 void set_rotation(struct transform *t, versors rot);
 void set_scale(struct transform *t, vec3s scale);
+
+void set_euler_angles(struct transform *t, vec3s angles);

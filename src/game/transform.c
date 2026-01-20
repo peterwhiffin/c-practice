@@ -1,8 +1,10 @@
 #include "transform.h"
+#include "cglm/struct/euler.h"
 #include "cglm/struct/quat.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
 #include "../types.h"
+#include "cglm/util.h"
 
 float vec3_magnitude(vec3s v)
 {
@@ -12,7 +14,7 @@ float vec3_magnitude(vec3s v)
 vec3s vec3_normalize(vec3s v)
 {
 	float mag = vec3_magnitude(v);
-	v.x = v.y / mag;
+	v.x = v.x / mag;
 	v.y = v.y / mag;
 	v.z = v.z / mag;
 	return v;
@@ -73,6 +75,29 @@ void set_position(struct transform *t, vec3s pos)
 void set_rotation(struct transform *t, versors rot)
 {
 	t->rot = glms_quat_normalize(rot);
+	update_transform_matrices(t);
+
+	vec3s euler = glms_euler_angles(t->world_transform);
+
+	euler.x = glm_deg(euler.x);
+	euler.y = glm_deg(euler.y);
+	euler.z = glm_deg(euler.z);
+	t->euler_angles = euler;
+}
+
+void set_euler_angles(struct transform *t, vec3s angles)
+{
+	t->euler_angles = angles;
+
+	vec3s radians;
+
+	radians.x = glm_rad(angles.x);
+	radians.y = glm_rad(angles.y);
+	radians.z = glm_rad(angles.z);
+
+	versors quat = glms_euler_xyz_quat(radians);
+
+	t->rot = glms_quat_normalize(quat);
 	update_transform_matrices(t);
 }
 
