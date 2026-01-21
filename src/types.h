@@ -263,6 +263,7 @@ struct renderer {
 	void (*draw_fullscreen_quad)(struct renderer *);
 	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
 	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
+	void (*scene_write)(struct scene *);
 	void (*reload_shaders)(struct renderer *);
 	void (*reload_model)(struct resources *, struct renderer *, struct model_import *);
 
@@ -301,6 +302,9 @@ struct game {
 	void (*load_functions)(struct game *);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
 	void (*init_scene)(struct scene *, struct resources *);
+	struct entity *(*get_new_entity)(struct scene *scene);
+	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
+	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
 	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
 };
 

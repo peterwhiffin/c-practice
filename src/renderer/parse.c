@@ -3,12 +3,399 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <wchar.h>
 #include "../types.h"
+#include "file.h"
 #include "load.h"
 
+#define SEP ": "
+#define INDENT "    "
+#define OPEN "{\n"
+#define CLOSE "}\n"
+
+#define ENTITY_TYPE "Entity"
+#define ENTITY_ID "id"
+#define ENTITY_NAME "name"
+
+#define TRANSFORM_TYPE "Transform"
+#define TRANSFORM_POS "pos"
+#define TRANSFORM_ROT "rot"
+#define TRANSFORM_SCALE "scale"
+
+#define CAMERA_TYPE "Camera"
+#define CAMERA_FOV "fov"
+#define CAMERA_NEAR "near"
+#define CAMERA_FAR "far"
+
+#define MESH_RENDERER_TYPE "MeshRenderer"
+#define MESH_RENDERER_MESH "mesh"
+#define MESH_RENDERER_MATS "materials"
+
+#define MATERIAL_TYPE "Material"
+#define MATERIAL_NAME "name"
+#define MATERIAL_COLOR "color"
+#define MATERIAL_ALBEDO "albedo"
+
+enum token_type { TYPE, FIELD, SEPARATOR, OPENER, CLOSER, VALUE };
+
+enum block_type { ENTITY, TRANSFORM, CAMERA, MESH_RENDERER };
+
 struct token {
+	enum token_type type;
 	char data[128];
 };
+
+struct token_pair {
+	struct token_pair *next;
+	struct token *field;
+	struct token *value;
+};
+
+struct token_block {
+	enum block_type type;
+	struct token_pair *pair_list;
+	struct token_block *parent;
+	struct token_block *children;
+	struct token_block *next;
+};
+
+void skip_white_space(const char *str, size_t *index)
+{
+	char c = str[*index];
+
+	while (c == ' ' && c != '\0') {
+		*index = *index + 1;
+		c = str[*index];
+	}
+}
+
+struct token *scene_get_tokens(char *filename, size_t *num_tokens)
+{
+	size_t token_index = 0;
+	size_t str_index = 0;
+	size_t file_length;
+
+	const char *str = read_file(filename);
+	struct token *tokens = malloc(sizeof(*tokens) * 40000);
+	struct token *current_token = &tokens[token_index];
+	enum token_type next_type = TYPE;
+
+	while (str[str_index] != '\0') {
+		switch (str[str_index]) {
+		case ':':
+			current_token = &tokens[token_index];
+			current_token->type = SEPARATOR;
+			next_type = VALUE;
+			snprintf(current_token->data, 128, "%c", str[str_index]);
+			token_index++;
+			str_index++;
+			break;
+		case '{':
+			current_token = &tokens[token_index];
+			current_token->type = OPENER;
+			tokens[token_index - 1].type = TYPE;
+			snprintf(current_token->data, 128, "%c", str[str_index]);
+			token_index++;
+			str_index++;
+			next_type = FIELD;
+			break;
+		case '}':
+			current_token = &tokens[token_index];
+			current_token->type = CLOSER;
+			snprintf(current_token->data, 128, "%c", str[str_index]);
+			token_index++;
+			str_index++;
+			next_type = TYPE;
+			break;
+		case ' ':
+			str_index++;
+			break;
+		case '\n':
+			str_index++;
+			next_type = FIELD;
+			break;
+		case '\r':
+			str_index++;
+			break;
+		default:
+			current_token = &tokens[token_index];
+			current_token->type = next_type;
+
+			// skip_white_space(str, &str_index);
+			size_t pos = 0;
+			char c = str[str_index];
+			while (c != ':' && c != '}' && c != '{' && c != '\n' && c != '\0' && c != '\r') {
+				current_token->data[pos] = c;
+				pos++;
+				str_index++;
+				c = str[str_index];
+			}
+
+			if (current_token->data[pos - 1] == ' ') {
+				pos = pos - 1;
+			}
+
+			current_token->data[pos] = '\0';
+
+			if (next_type == VALUE)
+				next_type = FIELD;
+
+			token_index++;
+
+			break;
+		}
+	}
+
+	free((void *)str);
+	*num_tokens = token_index;
+	return tokens;
+}
+
+void scene_write(struct scene *scene)
+{
+	FILE *f = fopen("test.scene", "w");
+
+	char indent[128];
+	snprintf(indent, 128, "%s", "");
+
+	for (int i = 0; i < scene->num_entities; i++) {
+		struct entity *e = &scene->entities[i];
+
+		fprintf(f, "%s %s", ENTITY_TYPE, OPEN);
+		snprintf(indent, 128, "%s", INDENT);
+		fprintf(f, "%s%s%s%u\n", indent, ENTITY_ID, SEP, e->id);
+		fprintf(f, "%s%s%s%s\n", indent, ENTITY_NAME, SEP, e->name);
+
+		fprintf(f, "%s%s %s", indent, TRANSFORM_TYPE, OPEN);
+		snprintf(indent, 128, "%s%s", INDENT, INDENT);
+		fprintf(f, "%s%s%s%f, %f, %f\n", indent, TRANSFORM_POS, SEP, e->transform->pos.x, e->transform->pos.y,
+			e->transform->pos.z);
+
+		fprintf(f, "%s%s%s%f, %f, %f, %f\n", indent, TRANSFORM_ROT, SEP, e->transform->rot.x,
+			e->transform->rot.y, e->transform->rot.z, e->transform->rot.w);
+
+		fprintf(f, "%s%s%s%f, %f, %f\n", indent, TRANSFORM_SCALE, SEP, e->transform->scale.x,
+			e->transform->scale.y, e->transform->scale.z);
+
+		snprintf(indent, 128, "%s", INDENT);
+		fprintf(f, "%s%s", indent, CLOSE);
+
+		if (e->camera) {
+			fprintf(f, "%s%s %s", indent, CAMERA_TYPE, OPEN);
+			snprintf(indent, 128, "%s%s", INDENT, INDENT);
+			fprintf(f, "%s%s%s%f\n", indent, CAMERA_FOV, SEP, e->camera->fov);
+			fprintf(f, "%s%s%s%f\n", indent, CAMERA_NEAR, SEP, e->camera->near_plane);
+			fprintf(f, "%s%s%s%f\n", indent, CAMERA_FAR, SEP, e->camera->far_plane);
+			snprintf(indent, 128, "%s", INDENT);
+			fprintf(f, "%s%s", indent, CLOSE);
+		}
+		if (e->renderer) {
+			fprintf(f, "%s%s %s", indent, MESH_RENDERER_TYPE, OPEN);
+			snprintf(indent, 128, "%s%s", INDENT, INDENT);
+			fprintf(f, "%s%s%s %s\n", indent, MESH_RENDERER_MESH, SEP, e->renderer->mesh->name);
+			fprintf(f, "%s%s%s", indent, MESH_RENDERER_MATS, SEP);
+			for (int k = 0; k < e->renderer->mesh->num_sub_meshes; k++) {
+				if (k == e->renderer->mesh->num_sub_meshes - 1) {
+					fprintf(f, "%s\n", e->renderer->mesh->sub_meshes[k].mat->name);
+				} else {
+					fprintf(f, "%s, ", e->renderer->mesh->sub_meshes[k].mat->name);
+				}
+			}
+
+			snprintf(indent, 128, "%s", INDENT);
+			fprintf(f, "%s%s", indent, CLOSE);
+		}
+		fprintf(f, "%s\n", CLOSE);
+	}
+
+	fclose(f);
+}
+
+// struct token *get_next_token(struct token *tokens, size_t *count)
+// {
+// 	*count = *count + 1;
+// 	struct token *next_token =
+// }
+
+struct token_block *get_new_block()
+{
+	struct token_block *b = malloc(sizeof(*b));
+	b->type = 0;
+	b->pair_list = NULL;
+	b->next = NULL;
+	b->parent = NULL;
+	b->children = NULL;
+	return b;
+}
+
+struct token_pair *get_new_pair()
+{
+	struct token_pair *p = malloc(sizeof(*p));
+	p->field = NULL;
+	p->value = NULL;
+	p->next = NULL;
+	return p;
+}
+
+struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens, size_t num_tokens)
+{
+	size_t count = 0;
+	struct token *current_token;
+	struct token_block *current_block = NULL;
+	struct token_block *current_parent = NULL;
+
+	while (count < num_tokens) {
+		current_token = &tokens[count];
+
+		switch (current_token->type) {
+		case TYPE:
+			if (current_block) {
+				if (current_parent) {
+					struct token_block *new_block = get_new_block();
+					new_block->next = current_parent->children;
+					new_block->parent = current_parent;
+					current_parent->children = new_block;
+					current_block = new_block;
+				} else {
+					struct token_block *new_block = get_new_block();
+					new_block->next = current_block;
+					current_block = new_block;
+				}
+			} else {
+				current_block = get_new_block();
+			}
+
+			current_parent = current_block;
+
+			if (strcmp(current_token->data, ENTITY_TYPE) == 0) {
+				current_block->type = ENTITY;
+			} else if (strcmp(current_token->data, TRANSFORM_TYPE) == 0) {
+				current_block->type = TRANSFORM;
+			} else if (strcmp(current_token->data, CAMERA_TYPE) == 0) {
+				current_block->type = CAMERA;
+			} else if (strcmp(current_token->data, MESH_RENDERER_TYPE) == 0) {
+				current_block->type = MESH_RENDERER;
+			}
+
+			break;
+		case FIELD:
+			if (current_block->pair_list) {
+				struct token_pair *new_pair = get_new_pair();
+				new_pair->next = current_block->pair_list;
+				current_block->pair_list = new_pair;
+			} else {
+				struct token_pair *new_pair = get_new_pair();
+				current_block->pair_list = new_pair;
+			}
+
+			current_block->pair_list->field = current_token;
+			break;
+		case VALUE:
+			current_block->pair_list->value = current_token;
+			break;
+		case SEPARATOR:
+			break;
+		case OPENER:
+			break;
+		case CLOSER:
+			if (current_parent) {
+				current_block = current_parent;
+				current_parent = current_parent->parent;
+			}
+
+			break;
+		}
+		count++;
+	}
+
+	return current_block;
+}
+
+void write_blocks(struct token_block *blocks, FILE *f)
+{
+	struct token_block *current_block = blocks;
+
+	while (current_block) {
+		switch (current_block->type) {
+		case ENTITY:
+			fprintf(f, "%s\n", "ENTITY");
+			break;
+		case TRANSFORM:
+			fprintf(f, "%s\n", "TRANSFORM");
+			break;
+		case CAMERA:
+			fprintf(f, "%s\n", "CAMERA");
+			break;
+		case MESH_RENDERER:
+			fprintf(f, "%s\n", "MESH_RENDERER");
+			break;
+		}
+
+		struct token_pair *current_pair = current_block->pair_list;
+		while (current_pair) {
+			fprintf(f, "%s::%s\n", current_pair->field->data, current_pair->value->data);
+			current_pair = current_pair->next;
+		}
+
+		struct token_block *child_block = current_block->children;
+		if (child_block) {
+			fprintf(f, "%s", "-------------CHILDREN----------------\n");
+			write_blocks(child_block, f);
+		}
+
+		current_block = current_block->next;
+		fprintf(f, "%s", "\n");
+	}
+}
+
+void create_scene(struct scene *scene, struct game *game, struct token_block *blocks, struct entity *e)
+{
+	struct token_block *current_block = blocks;
+	while (current_block) {
+		switch (current_block->type) {
+		case ENTITY:
+			e = game->get_new_entity(scene);
+			break;
+		case TRANSFORM:
+			break;
+		case CAMERA:
+			break;
+		case MESH_RENDERER:
+			break;
+		}
+
+		struct token_pair *pair = current_block->pair_list;
+		while (pair) {
+			if (strcmp(pair->field->data, ENTITY_NAME) == 0) {
+				snprintf(e->name, 128, "%s", pair->value->data);
+			} else if (strcmp(pair->field->data, ENTITY_ID) == 0) {
+				e->id = atoi(pair->value->data);
+			}
+
+			pair = pair->next;
+		}
+
+		struct token_block *child = current_block->children;
+
+		if (child) {
+			create_scene(scene, game, child, e);
+		}
+
+		current_block = current_block->next;
+	}
+}
+
+void scene_load(struct scene *scene, struct game *game, char *filename)
+{
+	size_t num_tokens;
+	struct token *tokens = scene_get_tokens(filename, &num_tokens);
+	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens);
+	create_scene(scene, game, blocks);
+	// FILE *f = fopen("blocks.txt", "w");
+	// write_blocks(blocks, f);
+	// fclose(f);
+	free(tokens);
+}
 
 struct token *mesh_info_get_tokens(char *filename, size_t *num_tokens)
 {
@@ -75,92 +462,62 @@ struct token *mesh_info_get_tokens(char *filename, size_t *num_tokens)
 	return tokens;
 }
 
-// void write_mesh_infos(struct resources *res)
+// void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename, struct mesh_info *mesh_infos,
+// 		       size_t *num_mesh_infos, float import_scale)
 // {
-// 	FILE *f = fopen("testmeshinfostoo.txt", "w");
+// 	size_t num_tokens = 0;
+// 	size_t count = 0;
+// 	struct mesh_info *current_mesh_info;
+// 	struct material *current_mat;
+// 	struct token *tokens = mesh_info_get_tokens(filename, &num_tokens);
 //
-// 	for (int i = 0; i < res->num_mesh_infos; i++) {
-// 		struct mesh_info *mesh_info = &res->mesh_infos[i];
+// 	while (count < num_tokens) {
+// 		struct token *t = &tokens[count];
 //
-// 		fprintf(f, "mesh: %s\n", mesh_info->name);
-// 		for (int k = 0; k < mesh_info->num_mats; k++) {
-// 			struct material *mat = mesh_info->mats[k];
-// 			fprintf(f, "	mat: %s\n", mat->name);
-// 			fprintf(f, "		tex: %s\n", mat->tex->name);
+// 		while (strcmp(t->data, "Mesh Name") == 0) {
+// 			count += 2;
+// 			t = &tokens[count];
+//
+// 			current_mesh_info = &mesh_infos[*num_mesh_infos];
+// 			current_mesh_info->num_mats = 0;
+// 			current_mesh_info->import_scale = import_scale;
+// 			snprintf(current_mesh_info->name, 128, "%s", t->data);
+// 			*num_mesh_infos += 1;
+//
+// 			count++;
+// 			t = &tokens[count];
+//
+// 			while (strcmp(t->data, "Slot") == 0) {
+// 				count += 2;
+// 				t = &tokens[count];
+//
+// 				current_mat = find_material(res, t->data);
+// 				if (!current_mat) {
+// 					get_new_material(res, ren, t->data);
+// 				}
+// 				current_mesh_info->mats[current_mesh_info->num_mats] = current_mat;
+// 				current_mesh_info->num_mats++;
+//
+// 				count += 2;
+// 				t = &tokens[count];
+//
+// 				if (current_mat->tex == NULL) {
+// 					current_mat->tex = find_texture(res, t->data);
+// 				}
+//
+// 				count += 2;
+// 				t = &tokens[count];
+// 			}
+//
+// 			if (current_mesh_info->num_mats == 0) {
+// 				current_mesh_info->mats[0] = &res->all_mats[0];
+// 				current_mesh_info->num_mats = 1;
+// 			}
 // 		}
+//
+// 		count = count + 3;
 // 	}
 //
-// 	fclose(f);
+// 	*num_mesh_infos -= 1;
+// 	free(tokens);
 // }
-
-// void write_tokens(struct token *tokens, size_t num_tokens)
-// {
-// 	FILE *f = fopen("tokentest.txt", "w");
-//
-// 	for (int i = 0; i < num_tokens; i++) {
-// 		struct token *t = &tokens[i];
-// 		fprintf(f, "token: %s\n", t->data);
-// 	}
-//
-// 	fclose(f);
-// }
-
-void create_mesh_infos(struct resources *res, struct renderer *ren, char *filename, struct mesh_info *mesh_infos,
-		       size_t *num_mesh_infos, float import_scale)
-{
-	size_t num_tokens = 0;
-	size_t count = 0;
-	struct mesh_info *current_mesh_info;
-	struct material *current_mat;
-	struct token *tokens = mesh_info_get_tokens(filename, &num_tokens);
-
-	while (count < num_tokens) {
-		struct token *t = &tokens[count];
-
-		while (strcmp(t->data, "Mesh Name") == 0) {
-			count += 2;
-			t = &tokens[count];
-
-			current_mesh_info = &mesh_infos[*num_mesh_infos];
-			current_mesh_info->num_mats = 0;
-			current_mesh_info->import_scale = import_scale;
-			snprintf(current_mesh_info->name, 128, "%s", t->data);
-			*num_mesh_infos += 1;
-
-			count++;
-			t = &tokens[count];
-
-			while (strcmp(t->data, "Slot") == 0) {
-				count += 2;
-				t = &tokens[count];
-
-				current_mat = find_material(res, t->data);
-				if (!current_mat) {
-					get_new_material(res, ren, t->data);
-				}
-				current_mesh_info->mats[current_mesh_info->num_mats] = current_mat;
-				current_mesh_info->num_mats++;
-
-				count += 2;
-				t = &tokens[count];
-
-				if (current_mat->tex == NULL) {
-					current_mat->tex = find_texture(res, t->data);
-				}
-
-				count += 2;
-				t = &tokens[count];
-			}
-
-			if (current_mesh_info->num_mats == 0) {
-				current_mesh_info->mats[0] = &res->all_mats[0];
-				current_mesh_info->num_mats = 1;
-			}
-		}
-
-		count = count + 3;
-	}
-
-	*num_mesh_infos -= 1;
-	free(tokens);
-}

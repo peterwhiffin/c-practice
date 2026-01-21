@@ -142,18 +142,18 @@ void init_scene(struct scene *scene, struct resources *res)
 	scene->num_cameras = 0;
 	scene->num_renderers = 0;
 
-	scene->scene_cam = get_new_entity(scene);
-	add_camera(scene, scene->scene_cam);
-	set_position(scene->scene_cam->transform, (vec3s){ 0.0f, 0.0f, -10.0f });
-	scene->scene_cam->camera->fov = glm_rad(79.0f);
-	scene->scene_cam->camera->near_plane = 0.1f;
-	scene->scene_cam->camera->far_plane = 1000.0f;
+	// scene->scene_cam = get_new_entity(scene);
+	// add_camera(scene, scene->scene_cam);
+	// set_position(scene->scene_cam->transform, (vec3s){ 0.0f, 0.0f, -10.0f });
+	// scene->scene_cam->camera->fov = glm_rad(79.0f);
+	// scene->scene_cam->camera->near_plane = 0.1f;
+	// scene->scene_cam->camera->far_plane = 1000.0f;
 
-	for (int i = 0; i < res->num_meshes; i++) {
-		struct entity *e = get_new_entity(scene);
-		add_renderer(scene, e);
-		e->renderer->mesh = &res->meshes[i];
-	}
+	// for (int i = 0; i < res->num_meshes; i++) {
+	// 	struct entity *e = get_new_entity(scene);
+	// 	add_renderer(scene, e);
+	// 	e->renderer->mesh = &res->meshes[i];
+	// }
 }
 
 PETE_API void load_functions(struct game *game, GLADloadproc load)
@@ -161,4 +161,7 @@ PETE_API void load_functions(struct game *game, GLADloadproc load)
 	game->init_scene = init_scene;
 	game->update = update;
 	game->entity_duplicate = entity_duplicate;
+	game->get_new_entity = get_new_entity;
+	game->add_camera = add_camera;
+	game->add_renderer = add_renderer;
 }

@@ -56,9 +56,9 @@ void debug_draw(struct editor *editor)
 	ImGui::Begin("Debug");
 	ImGui::DragFloat2("image size", &editor->image_size.x);
 	ImGui::DragFloat2("image pos", &editor->image_pos.x);
-	ImGui::Text("this is text");
-	ImGui::Text("this is also text");
-	ImGui::Text("this, too, is also text");
+	if (ImGui::Button("Save Scene", ImVec2(150, 80))) {
+		editor->ren->scene_write(editor->scene);
+	}
 	ImGui::End();
 }
 

@@ -317,10 +317,8 @@ struct vert_group {
 
 struct texture *find_texture(struct resources *res, const char *name)
 {
-	printf("Num textures: %lu\n", res->num_textures);
 	for (int i = 0; i < res->num_textures; i++) {
 		struct texture *tex = &res->textures[i];
-		printf("tex check: %s\n", tex->file_info.filename);
 		if (strcmp(name, tex->file_info.filename) == 0) {
 			return tex;
 		}
@@ -374,25 +372,20 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 		if (current_mesh_info) {
 			mesh->sub_meshes[k].mat = current_mesh_info->mats[k];
 		} else {
-			printf("no mesh info\n");
 			struct material *mat = res->default_mat;
 			if (ufbx_mat) {
-				printf("have ufbx mat\n");
 				mat = find_material(res, ufbx_mat->name.data);
 
 				if (!mat) {
-					printf("no existing mat\n");
 					mat = get_new_material(res, ren, ufbx_mat->name.data);
 
 					if (ufbx_mat->textures.count > 0) {
-						printf("ufbx mat has texture\n");
 						char tex_name[256];
 						get_filename(tex_name,
 							     ufbx_mat->textures.data[0].texture->filename.data);
 
 						struct texture *tex = find_texture(res, tex_name);
 						if (!tex) {
-							printf("couldn't find tex: %s\n", tex_name);
 							tex = &res->white_tex;
 						}
 
@@ -603,7 +596,6 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 
 	stbi_set_flip_vertically_on_load(true);
 
-	printf("tex count: %lu\n", tex_count);
 	for (int i = 0; i < tex_count; i++) {
 		struct texture *tex = get_new_texture(res);
 		tex->file_info = texture_files[i];
@@ -649,7 +641,6 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 		size_t num_added = new_num - current_num;
 
 		model->file_info = model_files[i];
-		printf("file: %s, model file copy: %s\n", model_files[i].filename, model->file_info.filename);
 		model->meshes = malloc(sizeof(struct mesh *) * num_added);
 		model->num_meshes = num_added;
 

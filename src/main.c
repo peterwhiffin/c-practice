@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include "arena.h"
 #include "types.h"
+#include "renderer/file_lin.c"
+#include "renderer/parse.c"
 
 #if defined(_WIN32)
 #include "reload_win.c"
@@ -165,6 +167,8 @@ int main()
 	ren->load_resources(res, ren, &render_arena);
 	game->init_scene(scene, res);
 	editor->init_editor(win, editor);
+
+	scene_load(scene, game, "test.scene");
 
 	while (!win->should_close) {
 		check_modified(notify, game, ren, res, &main_arena, &render_arena, win, editor);

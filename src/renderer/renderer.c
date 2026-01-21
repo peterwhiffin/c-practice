@@ -3,6 +3,7 @@
 #include "cglm/types-struct.h"
 #include "glad.c"
 #include "ufbx.c"
+#include <strings.h>
 #if defined(_WIN32)
 #include "file_win.c"
 #elif defined(__linux__)
@@ -235,7 +236,9 @@ void init_renderer(struct renderer *ren, struct arena *arena, struct window *win
 {
 	// ren->main_fbo.targets = get_texture(ren, arena);
 	struct texture *tex = &ren->main_fbo.targets;
+	struct scene *scene;
 
+	// scene_load(scene, "test.scene");
 	ren->clear_color[0] = 1.0f;
 	ren->clear_color[1] = 0.0f;
 	ren->clear_color[2] = 0.0f;
@@ -329,6 +332,7 @@ PETE_API void load_functions(struct renderer *ren, GLADloadproc load)
 	ren->reload_renderer = reload_renderer;
 	ren->reload_shaders = reload_shaders;
 	ren->load_resources = load_resources;
+	ren->scene_write = scene_write;
 	ren->window_resized = window_resized;
 	ren->draw_scene = draw_scene;
 	ren->draw_fullscreen_quad = draw_fullscreen_quad;
