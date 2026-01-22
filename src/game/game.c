@@ -34,6 +34,7 @@ struct camera *add_camera(struct scene *scene, struct entity *entity)
 	entity->camera = c;
 	c->entity = entity;
 	scene->num_cameras++;
+	scene->scene_cam = entity;
 	return c;
 }
 

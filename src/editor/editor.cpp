@@ -68,11 +68,15 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 
 	vec3s euler_angles = e->transform->euler_angles;
 
-	ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f);
-	ImGui::DragFloat3("rot", &euler_angles.x, 0.01f);
-	ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f);
-
-	set_euler_angles(e->transform, euler_angles);
+	if (ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f)) {
+		set_position(e->transform, e->transform->pos);
+	}
+	if (ImGui::DragFloat3("rot", &euler_angles.x, 0.01f)) {
+		set_euler_angles(e->transform, euler_angles);
+	}
+	if (ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f)) {
+		set_scale(e->transform, e->transform->scale);
+	}
 
 	if (e->camera) {
 		if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {

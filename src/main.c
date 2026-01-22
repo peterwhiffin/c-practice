@@ -168,7 +168,7 @@ int main()
 	game->init_scene(scene, res);
 	editor->init_editor(win, editor);
 
-	scene_load(scene, game, "test.scene");
+	scene_load(scene, game, res, "test.scene");
 
 	while (!win->should_close) {
 		check_modified(notify, game, ren, res, &main_arena, &render_arena, win, editor);
