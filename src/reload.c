@@ -55,7 +55,7 @@ void load_renderer(struct renderer *ren)
 		exit(EXIT_FAILURE);
 	}
 
-	ren->load_functions = dlsym(ren->lib_handle, "load_functions");
+	ren->load_functions = dlsym(ren->lib_handle, "load_renderer_functions");
 
 	if ((error = dlerror()) != NULL) {
 		printf("dlsym error\n");
@@ -85,7 +85,7 @@ void load_game_lib(struct game *game)
 		exit(EXIT_FAILURE);
 	}
 
-	game->load_functions = dlsym(game->lib_handle, "load_functions");
+	game->load_functions = dlsym(game->lib_handle, "load_game_functions");
 
 	if ((error = dlerror()) != NULL) {
 		printf("dlsym error\n");
@@ -114,7 +114,7 @@ void load_editor_lib(struct editor *editor)
 		exit(EXIT_FAILURE);
 	}
 
-	editor->load_functions = dlsym(editor->lib_handle, "load_functions");
+	editor->load_functions = dlsym(editor->lib_handle, "load_editor_functions");
 
 	if ((error = dlerror()) != NULL) {
 		fprintf(stderr, "%s%s\n", "DLSYM::", error);
@@ -142,7 +142,7 @@ void load_physics_lib(struct physics *physics)
 		exit(EXIT_FAILURE);
 	}
 
-	physics->load_functions = dlsym(physics->lib_handle, "load_functions");
+	physics->load_functions = dlsym(physics->lib_handle, "load_physics_functions");
 
 	if ((error = dlerror()) != NULL) {
 		fprintf(stderr, "%s%s\n", "DLSYM::", error);
