@@ -90,13 +90,40 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 
 	if (e->renderer) {
 		if (ImGui::CollapsingHeader("Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("%s", e->renderer->mesh->name);
+			// ImGui::Text("%s", e->renderer->mesh->name);
+
+			if (ImGui::BeginCombo("mesh", e->renderer->mesh->name)) {
+				for (int i = 0; i < editor->res->num_meshes; i++) {
+					if (ImGui::Selectable(editor->res->meshes[i].name)) {
+						e->renderer->mesh = &editor->res->meshes[i];
+					}
+				}
+
+				ImGui::EndCombo();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::ColorPicker4("base color", &e->renderer->mesh->sub_meshes[0].mat->color.r);
 			ImGui::Image(e->renderer->mesh->sub_meshes[0].mat->tex->id, ImVec2(50, 50));
 		}
+	}
+
+	if (ImGui::Button("Add child", ImVec2(100, 70))) {
+		struct entity *new_entity = editor->game->get_new_entity(editor->scene);
+		editor->game->add_renderer(editor->scene, new_entity);
+		new_entity->renderer->mesh = &editor->res->meshes[0];
+		editor->game->entity_set_parent(new_entity, e);
+	}
+
+	if (e->parent && ImGui::Button("Remove parent", ImVec2(100, 70))) {
+		editor->game->entity_unset_parent(e);
+	}
+
+	struct entity *child = e->children;
+	while (child) {
+		ImGui::Text("%s", child->name);
+		child = child->next;
 	}
 }
 
@@ -133,17 +160,30 @@ void draw_inspector(struct editor *editor)
 
 void update_editor(struct editor *editor)
 {
+	// glBindFramebuffer(GL_FRAMEBUFFER, ren->final_fbo.id);
+	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
+	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
+	ImGui::SetCurrentContext((ImGuiContext *)editor->imgui_ctx);
+
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-	ImGui::ShowDemoWindow(&editor->show_demo);
+	// ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+	// ImGui::ShowDemoWindow(&editor->show_demo);
+	bool show = true;
+	ImGui::ShowDemoWindow(&show);
 	scene_view_draw(editor);
 	draw_hierarchy(editor);
 	draw_inspector(editor);
 	debug_draw(editor);
 	ImGui::Render();
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	ImDrawData *draw_data = ImGui::GetDrawData();
+	if (!draw_data)
+		printf("INVALID DRAW DATA\n");
+
+	ImGui_ImplOpenGL3_RenderDrawData(draw_data);
 	ImGui::EndFrame();
 	ImGui::UpdatePlatformWindows();
 }
@@ -157,7 +197,7 @@ void init_editor(struct window *win, struct editor *editor)
 {
 	editor->show_demo = true;
 	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
+	editor->imgui_ctx = ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
 	(void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -165,8 +205,6 @@ void init_editor(struct window *win, struct editor *editor)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 	ImGui::StyleColorsDark();
-	// ImGui_ImplGlfw_InitForOpenGL(window->pWindow, true);
-	// ImGui_ImplSDL3_InitForOpenGL(window->pWindow, window->glContext);
 	ImGui_ImplSDL3_InitForOpenGL(win->sdl_win, win->ctx);
 	ImGui_ImplOpenGL3_Init("#version 460");
 
@@ -273,7 +311,7 @@ void editor_reload(struct editor *editor)
 {
 }
 
-extern "C" PETE_API void load_functions(struct editor *editor)
+extern "C" PETE_API void load_editor_functions(struct editor *editor)
 {
 	editor->init_editor = init_editor;
 	editor->update_editor = update_editor;

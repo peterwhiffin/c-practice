@@ -11,15 +11,16 @@
 #include <stdlib.h>
 #include "arena.h"
 #include "types.h"
-#include "renderer/file_lin.c"
-#include "renderer/parse.c"
 
-#if defined(_WIN32)
-#include "reload_win.c"
-#elif defined(__linux__)
-#include "reload.c"
-#endif
+#include "renderer/parse.c"
 #include "arena.c"
+#if defined(__linux__)
+#include "renderer/file_lin.c"
+#include "reload.c"
+#elif defined(_WIN32)
+#include "reload_win.c"
+#include "renderer/file_win.c"
+#endif
 
 struct arena main_arena;
 struct arena render_arena;
@@ -37,6 +38,10 @@ void window_init(struct window *win, struct input *input)
 	win->sdl_win = SDL_CreateWindow("practice", 800, 600, flags);
 	win->ctx = SDL_GL_CreateContext(win->sdl_win);
 
+	if (!win->ctx) {
+		printf("SDL GL CONTEXT NOT CREATED\n");
+	}
+
 	SDL_GL_MakeCurrent(win->sdl_win, win->ctx);
 	SDL_GL_SetSwapInterval(1);
 	SDL_SetWindowPosition(win->sdl_win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
@@ -53,9 +58,12 @@ void poll_events(struct window *win, struct input *input, struct renderer *ren, 
 {
 	SDL_Event event;
 
+	input->actions[MOUSE_DELTA].composite = (vec2s){ 0.0f, 0.0f };
+
 	while (SDL_PollEvent(&event)) {
-		editor->process_event(&event);
 		switch (event.type) {
+		case SDL_EVENT_MOUSE_MOTION:
+			input->actions[MOUSE_DELTA].composite = (vec2s){ event.motion.xrel, -event.motion.yrel };
 		case SDL_EVENT_MOUSE_WHEEL:
 			input->actions[MWHEEL].axis = event.wheel.y;
 			break;
@@ -63,7 +71,7 @@ void poll_events(struct window *win, struct input *input, struct renderer *ren, 
 			win->size.x = event.window.data1;
 			win->size.y = event.window.data2;
 			win->aspect = (float)event.window.data1 / event.window.data2;
-			ren->window_resized(ren, win, ren_arena);
+			// ren->window_resized(ren, win, ren_arena);
 			break;
 		case SDL_EVENT_QUIT:
 			win->should_close = true;
@@ -71,20 +79,19 @@ void poll_events(struct window *win, struct input *input, struct renderer *ren, 
 			win->should_close = true;
 			break;
 		}
+
+		editor->process_event(&event);
 	}
 }
 
 void check_input(struct input *input)
 {
-	float oldX = input->cursorPosition.x;
-	float oldY = input->cursorPosition.y;
+	float oldX = input->relativeCursorPosition.x;
+	float oldY = input->relativeCursorPosition.y;
 
 	SDL_GetMouseState(&input->relativeCursorPosition.x, &input->relativeCursorPosition.y);
 	SDL_MouseButtonFlags mouseButtonMask =
 		SDL_GetGlobalMouseState(&input->cursorPosition.x, &input->cursorPosition.y);
-
-	input->actions[MOUSE_DELTA].composite =
-		(vec2s){ input->cursorPosition.x - oldX, oldY - input->cursorPosition.y };
 
 	input->actions[MWHEEL].axis = 0.0f;
 	input->actions[M0].pushed = mouseButtonMask & SDL_BUTTON_LMASK;
@@ -135,6 +142,7 @@ int main()
 	render_arena = get_new_arena((size_t)1 << 30);
 	struct notify *notify = alloc_struct(&main_arena, typeof(*notify), 1);
 	struct game *game = alloc_struct(&main_arena, typeof(*game), 1);
+	struct physics *physics = alloc_struct(&main_arena, typeof(*physics), 1);
 	struct window *win = alloc_struct(&main_arena, typeof(*win), 1);
 	struct input *input = alloc_struct(&main_arena, typeof(*input), 1);
 	struct resources *res = alloc_struct(&main_arena, typeof(*res), 1);
@@ -158,8 +166,9 @@ int main()
 	editor->game = game;
 
 	window_init(win, input);
-	load_renderer(ren);
 	load_game_lib(game);
+	load_renderer(ren);
+	load_physics_lib(physics);
 	load_editor_lib(editor);
 	file_watch_init(notify);
 
@@ -169,12 +178,14 @@ int main()
 	editor->init_editor(win, editor);
 
 	scene_load(scene, game, res, "test.scene");
+	update_time(scene);
 
 	while (!win->should_close) {
 		check_modified(notify, game, ren, res, &main_arena, &render_arena, win, editor);
 		update_time(scene);
 		check_input(input);
 		poll_events(win, input, ren, editor, &render_arena);
+		physics->step_physics(physics, scene->dt);
 		game->update(scene, input, res, ren, win);
 		ren->draw_scene(ren, res, scene, win);
 		editor->update_editor(editor);
@@ -185,5 +196,6 @@ int main()
 	close_lib(game->lib_handle);
 	close_lib(ren->lib_handle);
 	close_lib(editor->lib_handle);
+	close_lib(physics->lib_handle);
 	return 0;
 }

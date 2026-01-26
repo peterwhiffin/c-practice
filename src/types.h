@@ -18,9 +18,11 @@
 #include "SDL3/SDL.h"
 
 #define SHADER_PATH "../../src/shaders/"
-#define PETE_API
+
 #if defined(_WIN32)
 #define PETE_API __declspec(dllexport)
+#else
+#define PETE_API
 #endif
 
 typedef uint8_t u8;
@@ -42,6 +44,7 @@ struct vertex {
 };
 
 struct transform {
+	struct entity *entity;
 	vec3s pos;
 	versors rot;
 	vec3s scale;
@@ -215,6 +218,10 @@ struct window {
 struct entity {
 	u32 id;
 	char name[128];
+	struct entity *parent;
+	struct entity *children;
+	struct entity *prev;
+	struct entity *next;
 	struct transform *transform;
 	struct mesh_renderer *renderer;
 	struct camera *camera;
@@ -223,6 +230,7 @@ struct entity {
 enum edit_mode { DEFAULT, PLACE };
 
 struct scene {
+	char filename[512];
 	struct entity *scene_cam;
 	struct entity *preview_model;
 	struct transform *transforms;
@@ -257,6 +265,7 @@ struct texture_list {
 struct renderer {
 	void *lib_handle;
 	void (*load_functions)(struct renderer *, void *);
+	void (*test_renderer)(struct renderer *, struct window *);
 	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
 	void (*window_resized)(struct renderer *, struct window *, struct arena *);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
@@ -302,10 +311,19 @@ struct game {
 	void (*load_functions)(struct game *);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
 	void (*init_scene)(struct scene *, struct resources *);
+	void (*entity_unset_parent)(struct entity *child);
+	void (*entity_set_parent)(struct entity *child, struct entity *parent);
 	struct entity *(*get_new_entity)(struct scene *scene);
 	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
 	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
 	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
+};
+
+struct physics {
+	void *lib_handle;
+	void (*load_functions)(struct physics *);
+	void (*step_physics)(struct physics *, float);
+	float time_accum;
 };
 
 struct editor {
@@ -320,6 +338,7 @@ struct editor {
 
 	vec2s image_size;
 	vec2s image_pos;
+	void *imgui_ctx;
 	void *lib_handle;
 	void (*load_functions)(struct editor *);
 	void (*update_editor)(struct editor *);

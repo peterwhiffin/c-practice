@@ -123,6 +123,35 @@ void load_editor_lib(struct editor *editor)
 
 	editor->load_functions(editor);
 }
+
+void load_physics_lib(struct physics *physics)
+{
+	char *error;
+
+	const char *build_command = "../../src/physics/build.sh";
+	if (physics->lib_handle != NULL) {
+		dlclose(physics->lib_handle);
+	}
+
+	//need to actually handle status.
+	int status = system(build_command);
+	physics->lib_handle = dlopen("./libphysicslib.so", RTLD_LAZY);
+
+	if (!physics->lib_handle) {
+		fprintf(stderr, "%s%s\n", "DLOPEN::", dlerror());
+		exit(EXIT_FAILURE);
+	}
+
+	physics->load_functions = dlsym(physics->lib_handle, "load_functions");
+
+	if ((error = dlerror()) != NULL) {
+		fprintf(stderr, "%s%s\n", "DLSYM::", error);
+		exit(EXIT_FAILURE);
+	}
+
+	physics->load_functions(physics);
+}
+
 void file_watch_init(struct notify *notify)
 {
 	notify->notify_fd = inotify_init();

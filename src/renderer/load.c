@@ -1,4 +1,5 @@
 #define STB_IMAGE_IMPLEMENTATION
+
 #include "../types.h"
 #include "../arena.h"
 #include "freetype/freetype.h"
@@ -320,10 +321,12 @@ struct texture *find_texture(struct resources *res, const char *name)
 	for (int i = 0; i < res->num_textures; i++) {
 		struct texture *tex = &res->textures[i];
 		if (strcmp(name, tex->file_info.filename) == 0) {
+			printf("found texture: %s\n", name);
 			return tex;
 		}
 	}
 
+	printf("couldn't find texture: %s\n", name);
 	return NULL;
 }
 
@@ -359,6 +362,7 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 	size_t mat_index = 0;
 
 	struct mesh_info *current_mesh_info = get_mesh_info(res, node->name.data);
+	// struct mesh_info *current_mesh_info = NULL;
 
 	for (int k = 0; k < node_mesh->material_parts.count; k++) {
 		ufbx_mesh_part *mesh_part = &node_mesh->material_parts.data[k];
@@ -433,7 +437,7 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 			}
 		}
 
-		assert(num_vertices == num_triangles * 3);
+		// assert(num_vertices == num_triangles * 3);
 
 		ufbx_vertex_stream streams[1] = {
 			{ vertices, num_vertices, sizeof(struct vertex) },
@@ -446,10 +450,15 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 		create_vao(&mesh->sub_meshes[k], vertices, indices, num_vertices * sizeof(struct vertex),
 			   num_indices * sizeof(u32));
 
-		free(tri_indices);
-		free(indices);
-		free(vertices);
+		if (tri_indices)
+			free(tri_indices);
+		if (indices)
+			free(indices);
+		if (vertices)
+			free(vertices);
 	}
+
+	res->num_meshes++;
 }
 
 void reload_model(struct resources *res, struct renderer *ren, struct model_import *model)
@@ -491,7 +500,7 @@ void reload_model(struct resources *res, struct renderer *ren, struct model_impo
 		mesh_count++;
 	}
 
-	struct mesh new_mesh = {};
+	struct mesh new_mesh = { 0 };
 	free(current_meshes);
 }
 
@@ -501,6 +510,10 @@ void load_model_scene(struct resources *res, struct renderer *ren, const char *p
 	ufbx_load_opts opts = { 0 };
 	ufbx_scene *scene = ufbx_load_file(path, &opts, NULL);
 
+	if (!scene) {
+		printf("failed to load scene\n");
+	}
+
 	for (size_t i = 0; i < scene->nodes.count; i++) {
 		ufbx_node *node = scene->nodes.data[i];
 
@@ -509,7 +522,7 @@ void load_model_scene(struct resources *res, struct renderer *ren, const char *p
 
 		create_mesh(res, ren, &res->meshes[res->num_meshes], node, node->mesh);
 
-		res->num_meshes++;
+		// res->num_meshes++;
 	}
 
 	res->num_models++;
@@ -531,8 +544,16 @@ void load_font(struct resources *res)
 	}
 
 	int error = 0;
-	if ((error = FT_New_Face(res->ft, "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf", 0,
-				 &res->font_face))) {
+
+	char font_file[512];
+#if defined(__linux__)
+	snprintf(font_file, 512, "%s", "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf");
+#elif defined(_WIN32)
+	snprintf(font_file, 512, "%s",
+		 "C:/Users/jorda/AppData/Local/Microsoft/Windows/Fonts/JetBrainsMonoNerdFont-Regular.ttf");
+#endif
+
+	if ((error = FT_New_Face(res->ft, font_file, 0, &res->font_face))) {
 		printf("ERROR::Load font face: %s\n", FT_Error_String(error));
 		return;
 	}
@@ -641,12 +662,29 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 		size_t num_added = new_num - current_num;
 
 		model->file_info = model_files[i];
-		model->meshes = malloc(sizeof(struct mesh *) * num_added);
+
+		if (num_added > 0) {
+			model->meshes = malloc(sizeof(struct mesh *) * num_added);
+		}
 		model->num_meshes = num_added;
 
+		int count = 0;
 		for (int i = current_num; i < new_num; i++) {
-			model->meshes[i] = &res->meshes[i];
+			model->meshes[count] = &res->meshes[i];
+			count++;
 		}
+
+		// just need to document this:
+		// this was trashing my memory, which should be obvious.
+		// indexing into model->meshes starting at current_num makes no sense.
+		// if current num is 2, and i've only allocated 1 mesh struct, then this is going to trash some memory, like it did.
+		// was a nightmare to debug.
+		// using an arena for the meshes allocation might have made this less of an issue to debug.
+		// Thank you for attending my TED talk.
+		//
+		// for (int i = current_num; i < new_num; i++) {
+		// 	model->meshes[i] = &res->meshes[i];
+		// }
 
 		// res->num_models++;
 	}
@@ -727,6 +765,7 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 	};
 
 	stbi_set_flip_vertically_on_load(false);
+
 	create_skybox_texture(ren->skybox_tex, paths);
 	create_skybox_texture(ren->skybox_night_tex, night_paths);
 	ren->current_skybox = ren->skybox_tex;

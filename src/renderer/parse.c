@@ -153,49 +153,62 @@ struct token *scene_get_tokens(char *filename, size_t *num_tokens)
 	return tokens;
 }
 
-void scene_write(struct scene *scene)
+void write_indent(FILE *f, int level)
 {
-	FILE *f = fopen("test.scene", "w");
+	for (int i = 0; i < level; i++) {
+		fprintf(f, "%s", INDENT);
+	}
+}
 
-	char indent[128];
-	snprintf(indent, 128, "%s", "");
-
-	for (int i = 0; i < scene->num_entities; i++) {
-		struct entity *e = &scene->entities[i];
-
+void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_entity, int indent_level)
+{
+	struct entity *e = current_entity;
+	while (e) {
 		fprintf(f, "%s %s", ENTITY_TYPE, OPEN);
-		snprintf(indent, 128, "%s", INDENT);
-		fprintf(f, "%s%s%s%u\n", indent, ENTITY_ID, SEP, e->id);
-		fprintf(f, "%s%s%s%s\n", indent, ENTITY_NAME, SEP, e->name);
-
-		fprintf(f, "%s%s %s", indent, TRANSFORM_TYPE, OPEN);
-		snprintf(indent, 128, "%s%s", INDENT, INDENT);
-		fprintf(f, "%s%s%s%f, %f, %f\n", indent, TRANSFORM_POS, SEP, e->transform->pos.x, e->transform->pos.y,
+		indent_level++;
+		write_indent(f, indent_level);
+		fprintf(f, "%s%s%u\n", ENTITY_ID, SEP, e->id);
+		write_indent(f, indent_level);
+		fprintf(f, "%s%s%s\n", ENTITY_NAME, SEP, e->name);
+		write_indent(f, indent_level);
+		fprintf(f, "%s %s", TRANSFORM_TYPE, OPEN);
+		indent_level++;
+		write_indent(f, indent_level);
+		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_POS, SEP, e->transform->pos.x, e->transform->pos.y,
 			e->transform->pos.z);
-
-		fprintf(f, "%s%s%s%f, %f, %f, %f\n", indent, TRANSFORM_ROT, SEP, e->transform->rot.x,
-			e->transform->rot.y, e->transform->rot.z, e->transform->rot.w);
-
-		fprintf(f, "%s%s%s%f, %f, %f\n", indent, TRANSFORM_SCALE, SEP, e->transform->scale.x,
-			e->transform->scale.y, e->transform->scale.z);
-
-		snprintf(indent, 128, "%s", INDENT);
-		fprintf(f, "%s%s", indent, CLOSE);
+		write_indent(f, indent_level);
+		fprintf(f, "%s%s%f, %f, %f, %f\n", TRANSFORM_ROT, SEP, e->transform->rot.x, e->transform->rot.y,
+			e->transform->rot.z, e->transform->rot.w);
+		write_indent(f, indent_level);
+		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_SCALE, SEP, e->transform->scale.x, e->transform->scale.y,
+			e->transform->scale.z);
+		indent_level--;
+		write_indent(f, indent_level);
+		fprintf(f, "%s", CLOSE);
 
 		if (e->camera) {
-			fprintf(f, "%s%s %s", indent, CAMERA_TYPE, OPEN);
-			snprintf(indent, 128, "%s%s", INDENT, INDENT);
-			fprintf(f, "%s%s%s%f\n", indent, CAMERA_FOV, SEP, e->camera->fov);
-			fprintf(f, "%s%s%s%f\n", indent, CAMERA_NEAR, SEP, e->camera->near_plane);
-			fprintf(f, "%s%s%s%f\n", indent, CAMERA_FAR, SEP, e->camera->far_plane);
-			snprintf(indent, 128, "%s", INDENT);
-			fprintf(f, "%s%s", indent, CLOSE);
+			write_indent(f, indent_level);
+			fprintf(f, "%s %s", CAMERA_TYPE, OPEN);
+			indent_level++;
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%f\n", CAMERA_FOV, SEP, e->camera->fov);
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%f\n", CAMERA_NEAR, SEP, e->camera->near_plane);
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%f\n", CAMERA_FAR, SEP, e->camera->far_plane);
+			indent_level--;
+			write_indent(f, indent_level);
+			fprintf(f, "%s", CLOSE);
 		}
+
 		if (e->renderer) {
-			fprintf(f, "%s%s %s", indent, MESH_RENDERER_TYPE, OPEN);
-			snprintf(indent, 128, "%s%s", INDENT, INDENT);
-			fprintf(f, "%s%s%s %s\n", indent, MESH_RENDERER_MESH, SEP, e->renderer->mesh->name);
-			fprintf(f, "%s%s%s", indent, MESH_RENDERER_MATS, SEP);
+			write_indent(f, indent_level);
+			fprintf(f, "%s %s", MESH_RENDERER_TYPE, OPEN);
+			indent_level++;
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s %s\n", MESH_RENDERER_MESH, SEP, e->renderer->mesh->name);
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s", MESH_RENDERER_MATS, SEP);
 			for (int k = 0; k < e->renderer->mesh->num_sub_meshes; k++) {
 				if (k == e->renderer->mesh->num_sub_meshes - 1) {
 					fprintf(f, "%s\n", e->renderer->mesh->sub_meshes[k].mat->name);
@@ -203,11 +216,31 @@ void scene_write(struct scene *scene)
 					fprintf(f, "%s, ", e->renderer->mesh->sub_meshes[k].mat->name);
 				}
 			}
-
-			snprintf(indent, 128, "%s", INDENT);
-			fprintf(f, "%s%s", indent, CLOSE);
+			indent_level--;
+			write_indent(f, indent_level);
+			fprintf(f, "%s", CLOSE);
 		}
-		fprintf(f, "%s\n", CLOSE);
+
+		if (e->children) {
+			scene_write_entity(scene, f, e->children, indent_level + 1);
+		}
+
+		e = e->next;
+		indent_level--;
+	}
+
+	fprintf(f, "%s\n", CLOSE);
+}
+
+void scene_write(struct scene *scene)
+{
+	FILE *f = fopen("test.scene", "w");
+
+	for (int i = 0; i < scene->num_entities; i++) {
+		struct entity *e = &scene->entities[i];
+		if (!e->parent) {
+			scene_write_entity(scene, f, e, 0);
+		}
 	}
 
 	fclose(f);
@@ -362,21 +395,25 @@ struct mesh *find_mesh(struct resources *res, const char *mesh_name)
 }
 
 void create_scene(struct scene *scene, struct game *game, struct resources *res, struct token_block *blocks,
-		  struct entity *current_entity)
+		  struct entity *current_entity, struct entity *current_parent)
 {
 	struct token_block *current_block = blocks;
 	struct token_pair *current_pair = current_block->pair_list;
+	struct entity *new_entity;
+	// struct entity *current_parent = NULL;
 
 	while (current_block) {
 		current_pair = current_block->pair_list;
 		switch (current_block->type) {
 		case ENTITY:
-			current_entity = game->get_new_entity(scene);
+			new_entity = game->get_new_entity(scene);
+			game->entity_set_parent(new_entity, current_parent);
+			current_entity = new_entity;
+			// current_parent = current_entity;
 
 			while (current_pair) {
 				if (strcmp(current_pair->field->data, ENTITY_NAME) == 0) {
 					snprintf(current_entity->name, 128, "%s", current_pair->value->data);
-					printf("entity name: %s\n", current_pair->value->data);
 				} else if (strcmp(current_pair->field->data, ENTITY_ID) == 0) {
 					current_entity->id = atoi(current_pair->value->data);
 				}
@@ -449,11 +486,14 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 
 		struct token_block *child_block = current_block->children;
 		if (child_block) {
-			create_scene(scene, game, res, child_block, current_entity);
+			create_scene(scene, game, res, child_block, current_entity, NULL);
 		}
 
 		current_block = current_block->next;
+		current_parent = NULL;
 	}
+
+	// current_entity = current_entity->parent;
 }
 
 void scene_load(struct scene *scene, struct game *game, struct resources *res, char *filename)
@@ -461,10 +501,10 @@ void scene_load(struct scene *scene, struct game *game, struct resources *res, c
 	size_t num_tokens;
 	struct token *tokens = scene_get_tokens(filename, &num_tokens);
 	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens);
-	create_scene(scene, game, res, blocks, NULL);
-	FILE *f = fopen("blocks.txt", "w");
-	write_blocks(blocks, f);
-	fclose(f);
+	create_scene(scene, game, res, blocks, NULL, NULL);
+	// FILE *f = fopen("blocks.txt", "w");
+	// write_blocks(blocks, f);
+	// fclose(f);
 	free(tokens);
 }
 

@@ -1,17 +1,18 @@
+#define UFBX_REAL_IS_FLOAT
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
 #include "glad.c"
 #include "ufbx.c"
-#include <strings.h>
+// #include <strings.h>
 #if defined(_WIN32)
 #include "file_win.c"
 #elif defined(__linux__)
 #include "file_lin.c"
 #endif
 #include "../arena.c"
-#include "load.c"
 #include "parse.c"
+#include "load.c"
 #include <stdio.h>
 // #include "../game/transform.c"
 
@@ -168,8 +169,8 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 
 	char fps_text[256];
 
-	float fps = 1 / scene->dt;
-	snprintf(fps_text, 256, "%i", (int)fps);
+	// float fps = 1 / scene->dt;
+	// snprintf(fps_text, 256, "%i", (int)fps);
 
 	int xPos = 220;
 	int yPos = 400;
@@ -185,14 +186,14 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	//
 	// glDisable(GL_SCISSOR_TEST);
 
-	draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
+	// draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
 	draw_fullscreen_quad(ren);
 
-	GLenum error;
-	while ((error = glGetError()) != GL_NO_ERROR) {
-		// Process/log the error, e.g., print the error code.
-		// fprintf(stderr, "OpenGL Error load func: %d\n", error);
-	}
+	// GLenum error;
+	// while ((error = glGetError()) != GL_NO_ERROR) {
+	// 	// Process/log the error, e.g., print the error code.
+	// 	// fprintf(stderr, "OpenGL Error load func: %d\n", error);
+	// }
 }
 
 void create_framebuffer(struct renderer *ren, struct framebuffer *fb)
@@ -311,6 +312,7 @@ void reload_renderer(struct renderer *ren, struct resources *res, struct arena *
 void window_resized(struct renderer *ren, struct window *win, struct arena *arena)
 {
 	// glViewport(0, 0, win->size.x, win->size.y);
+	// printf("window resized\n");
 	// delete_framebuffer(&ren->main_fbo, ren);
 	// ren->main_fbo.width = win->size.x;
 	// ren->main_fbo.height = win->size.y;
@@ -326,9 +328,23 @@ void window_resized(struct renderer *ren, struct window *win, struct arena *aren
 	// create_framebuffer(ren, &ren->main_fbo);
 }
 
-PETE_API void load_functions(struct renderer *ren, GLADloadproc load)
+void test_renderer(struct renderer *ren, struct window *win)
 {
+	glViewport(0, 0, win->size.x, win->size.y);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	ren->clear_color[0] = 0.0f;
+	ren->clear_color[1] = 0.0f;
+	ren->clear_color[2] = 1.0f;
+	ren->clear_color[3] = 1.0f;
+	glClearNamedFramebufferfv(0, GL_COLOR, 0, &ren->clear_color[0]);
+	glClearNamedFramebufferfv(0, GL_DEPTH, 0, &ren->clear_depth);
+}
+
+PETE_API void load_renderer_functions(struct renderer *ren, GLADloadproc load)
+{
+	printf("Loading Renderer Functions\n");
 	ren->init_renderer = init_renderer;
+	ren->test_renderer = test_renderer;
 	ren->reload_renderer = reload_renderer;
 	ren->reload_shaders = reload_shaders;
 	ren->load_resources = load_resources;
@@ -338,4 +354,8 @@ PETE_API void load_functions(struct renderer *ren, GLADloadproc load)
 	ren->draw_fullscreen_quad = draw_fullscreen_quad;
 	ren->reload_model = reload_model;
 	gladLoadGLLoader(load);
+
+	// glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
+	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
 }
