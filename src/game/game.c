@@ -9,7 +9,7 @@
 #include <string.h>
 #define CGLM_FORCE_LEFT_HANDED
 
-#define UFBX_REAL_IS_FLOAT
+// #define UFBX_REAL_IS_FLOAT
 
 #include "../types.h"
 #include "transform.c"
@@ -75,7 +75,10 @@ void entity_unset_parent(struct entity *entity)
 		entity->prev->next = entity->next;
 	}
 
-	entity->next->prev = entity->prev;
+	if (entity->next) {
+		entity->next->prev = entity->prev;
+	}
+
 	entity->next = NULL;
 	entity->prev = NULL;
 	entity->parent = NULL;

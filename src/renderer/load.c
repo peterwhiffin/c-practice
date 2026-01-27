@@ -423,7 +423,7 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 				v->pos.y = pos.y;
 				v->pos.z = pos.z;
 				vec4s vert = (vec4s){ v->pos.x, v->pos.y, v->pos.z, 1.0f };
-				mat4x3s mat43 = glms_mat4x3_make(&node->node_to_world.m00);
+				mat4x3s mat43 = glms_mat4x3_make((float *)&node->node_to_world.m00);
 				vec3s vert2 = glms_mat4x3_mulv(mat43, vert);
 				v->pos.x = vert2.x;
 				v->pos.y = vert2.y;
@@ -668,18 +668,21 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 		}
 		model->num_meshes = num_added;
 
-		int count = 0;
 		for (int i = current_num; i < new_num; i++) {
-			model->meshes[count] = &res->meshes[i];
-			count++;
+			model->meshes[i] = &res->meshes[i];
+		}
+
+		for (int i = 0; i < num_added; i++) {
+			model->meshes[i] = &res->meshes[current_num + i];
 		}
 
 		// just need to document this:
-		// this was trashing my memory, which should be obvious.
+		// this was trashing memory, which should be obvious.
 		// indexing into model->meshes starting at current_num makes no sense.
 		// if current num is 2, and i've only allocated 1 mesh struct, then this is going to trash some memory, like it did.
 		// was a nightmare to debug.
 		// using an arena for the meshes allocation might have made this less of an issue to debug.
+		// this is also just a dumb way to do this in general.
 		// Thank you for attending my TED talk.
 		//
 		// for (int i = current_num; i < new_num; i++) {

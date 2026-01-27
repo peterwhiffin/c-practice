@@ -344,43 +344,6 @@ struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens
 	return current_block;
 }
 
-void write_blocks(struct token_block *blocks, FILE *f)
-{
-	struct token_block *current_block = blocks;
-
-	while (current_block) {
-		switch (current_block->type) {
-		case ENTITY:
-			fprintf(f, "%s\n", "ENTITY");
-			break;
-		case TRANSFORM:
-			fprintf(f, "%s\n", "TRANSFORM");
-			break;
-		case CAMERA:
-			fprintf(f, "%s\n", "CAMERA");
-			break;
-		case MESH_RENDERER:
-			fprintf(f, "%s\n", "MESH_RENDERER");
-			break;
-		}
-
-		struct token_pair *current_pair = current_block->pair_list;
-		while (current_pair) {
-			fprintf(f, "%s::%s\n", current_pair->field->data, current_pair->value->data);
-			current_pair = current_pair->next;
-		}
-
-		struct token_block *child_block = current_block->children;
-		if (child_block) {
-			fprintf(f, "%s", "-------------CHILDREN----------------\n");
-			write_blocks(child_block, f);
-		}
-
-		current_block = current_block->next;
-		fprintf(f, "%s", "\n");
-	}
-}
-
 struct mesh *find_mesh(struct resources *res, const char *mesh_name)
 {
 	for (int i = 0; i < res->num_meshes; i++) {
@@ -400,7 +363,6 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 	struct token_block *current_block = blocks;
 	struct token_pair *current_pair = current_block->pair_list;
 	struct entity *new_entity;
-	// struct entity *current_parent = NULL;
 
 	while (current_block) {
 		current_pair = current_block->pair_list;
@@ -409,7 +371,6 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 			new_entity = game->get_new_entity(scene);
 			game->entity_set_parent(new_entity, current_parent);
 			current_entity = new_entity;
-			// current_parent = current_entity;
 
 			while (current_pair) {
 				if (strcmp(current_pair->field->data, ENTITY_NAME) == 0) {
@@ -427,7 +388,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					vec3s pos = (vec3s){ 0.0f, 0.0f, 0.0f };
-					while (token != NULL) {
+					while (token) {
 						pos.raw[index] = strtof(token, NULL);
 						index++;
 						token = strtok(NULL, ",");
@@ -438,7 +399,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					versors rot = (versors){ 0.0f, 0.0f, 0.0f, 1.0f };
-					while (token != NULL) {
+					while (token) {
 						rot.raw[index] = strtof(token, NULL);
 						index++;
 						token = strtok(NULL, ",");
@@ -448,7 +409,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					vec3s scale = (vec3s){ 1.0f, 1.0f, 1.0f };
-					while (token != NULL) {
+					while (token) {
 						scale.raw[index] = strtof(token, NULL);
 						index++;
 						token = strtok(NULL, ",");
@@ -486,14 +447,12 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 
 		struct token_block *child_block = current_block->children;
 		if (child_block) {
-			create_scene(scene, game, res, child_block, current_entity, NULL);
+			create_scene(scene, game, res, child_block, current_entity, current_entity);
 		}
 
 		current_block = current_block->next;
-		current_parent = NULL;
+		current_entity = current_parent;
 	}
-
-	// current_entity = current_entity->parent;
 }
 
 void scene_load(struct scene *scene, struct game *game, struct resources *res, char *filename)
@@ -502,9 +461,6 @@ void scene_load(struct scene *scene, struct game *game, struct resources *res, c
 	struct token *tokens = scene_get_tokens(filename, &num_tokens);
 	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens);
 	create_scene(scene, game, res, blocks, NULL, NULL);
-	// FILE *f = fopen("blocks.txt", "w");
-	// write_blocks(blocks, f);
-	// fclose(f);
 	free(tokens);
 }
 

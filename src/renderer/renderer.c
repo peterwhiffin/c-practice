@@ -4,17 +4,11 @@
 #include "cglm/types-struct.h"
 #include "glad.c"
 #include "ufbx.c"
-// #include <strings.h>
-#if defined(_WIN32)
-#include "file_win.c"
-#elif defined(__linux__)
-#include "file_lin.c"
-#endif
+#include "file.c"
 #include "../arena.c"
 #include "parse.c"
 #include "load.c"
 #include <stdio.h>
-// #include "../game/transform.c"
 
 void draw_text(struct renderer *ren, struct resources *res, const char *text, size_t length, float x, float y,
 	       float scale)

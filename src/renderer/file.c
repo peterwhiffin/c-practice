@@ -3,7 +3,12 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__linux__)
 #include <dirent.h>
+#elif defined(_WIN32)
+#inclue < windows.h>
+#endif
 
 const char *read_file(char *filename)
 {
@@ -49,6 +54,8 @@ void get_filename_no_ext(char *name, const char *path)
 
 	snprintf(name, 256, "%s", file_name);
 }
+
+#if defined(__linux__)
 void get_resource_files(char *path, struct file_info *model_files, struct file_info *texture_files, size_t *model_count,
 			size_t *texture_count)
 {
@@ -97,3 +104,57 @@ void get_resource_files(char *path, struct file_info *model_files, struct file_i
 
 	closedir(dir_stream);
 }
+
+#elif defined(_WIN32)
+void get_resource_files(char *sDir, struct file_info *model_files, struct file_info *texture_files, size_t *model_count,
+			size_t *texture_count)
+{
+	char full_path[256];
+	char extension[128];
+	char file_name[128];
+	char name[128];
+	struct file_info *file_info;
+
+	WIN32_FIND_DATA fdFile;
+	HANDLE hFind = NULL;
+
+	snprintf(full_path, 256, "%s*.*", sDir);
+
+	if ((hFind = FindFirstFile(full_path, &fdFile)) == INVALID_HANDLE_VALUE) {
+		printf("Path not found: [%s]\n", sDir);
+		return;
+	}
+
+	do {
+		if (strcmp(fdFile.cFileName, ".") != 0 && strcmp(fdFile.cFileName, "..") != 0) {
+			sprintf(full_path, "%s%s", sDir, fdFile.cFileName);
+
+			if (fdFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				snprintf(full_path, 256, "%s/", full_path);
+				get_resource_files(full_path, model_files, texture_files, model_count, texture_count);
+			} else {
+				get_extension(extension, full_path);
+				get_filename(file_name, full_path);
+				get_filename_no_ext(name, full_path);
+
+				if (strcmp(extension, "fbx") == 0) {
+					file_info = &model_files[*model_count];
+					*model_count = *model_count + 1;
+				} else if (strcmp(extension, "png") == 0) {
+					file_info = &texture_files[*texture_count];
+					*texture_count = *texture_count + 1;
+				} else {
+					continue;
+				}
+
+				snprintf(file_info->path, 512, "%s", full_path);
+				snprintf(file_info->extension, 128, "%s", extension);
+				snprintf(file_info->filename, 256, "%s", file_name);
+				snprintf(file_info->name, 256, "%s", name);
+			}
+		}
+	} while (FindNextFile(hFind, &fdFile)); //Find the next file.
+
+	FindClose(hFind); //Always, Always, clean things up!
+}
+#endif

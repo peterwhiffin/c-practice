@@ -1,6 +1,7 @@
 // #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #include "cglm/struct/vec3.h"
 #include "cglm/types.h"
+#include <wchar.h>
 #define NO_GLAD
 #include "./imgui.cpp"
 #include "./imgui_demo.cpp"
@@ -121,9 +122,33 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 	}
 
 	struct entity *child = e->children;
-	while (child) {
-		ImGui::Text("%s", child->name);
-		child = child->next;
+	if (!child) {
+		ImGui::Text("%s", "NO CHILDREN");
+	} else {
+		while (child) {
+			ImGui::Text("%s", child->name);
+			child = child->next;
+		}
+	}
+}
+
+void draw_tree_node(struct editor *editor, struct entity *entity)
+{
+	float cursor_x = ImGui::GetCursorPosX();
+
+	while (entity) {
+		bool selected = entity == editor->selected_entity ? true : false;
+		if (ImGui::Selectable(entity->name, selected)) {
+			editor->selected_entity = entity;
+		}
+
+		if (entity->children) {
+			ImGui::SetCursorPosX(cursor_x + 10.0f);
+			draw_tree_node(editor, entity->children);
+			ImGui::SetCursorPosX(cursor_x);
+		}
+
+		entity = entity->next;
 	}
 }
 
@@ -133,9 +158,8 @@ void draw_hierarchy(struct editor *editor)
 
 	for (int i = 0; i < editor->scene->num_entities; i++) {
 		struct entity *e = &editor->scene->entities[i];
-		bool selected = e == editor->selected_entity ? true : false;
-		if (ImGui::Selectable(e->name, selected)) {
-			editor->selected_entity = e;
+		if (!e->parent) {
+			draw_tree_node(editor, e);
 		}
 	}
 

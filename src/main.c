@@ -1,8 +1,7 @@
+#define CGLM_FORCE_LEFT_HANDED
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_mouse.h"
 #include "cglm/types-struct.h"
-#define CGLM_FORCE_LEFT_HANDED
-#define UFBX_REAL_IS_FLOAT
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_video.h"
@@ -14,13 +13,8 @@
 
 #include "renderer/parse.c"
 #include "arena.c"
-#if defined(__linux__)
-#include "renderer/file_lin.c"
+#include "renderer/file.c"
 #include "reload.c"
-#elif defined(_WIN32)
-#include "reload_win.c"
-#include "renderer/file_win.c"
-#endif
 
 struct arena main_arena;
 struct arena render_arena;
@@ -90,12 +84,12 @@ void check_input(struct input *input)
 	float oldY = input->relativeCursorPosition.y;
 
 	SDL_GetMouseState(&input->relativeCursorPosition.x, &input->relativeCursorPosition.y);
-	SDL_MouseButtonFlags mouseButtonMask =
+	SDL_MouseButtonFlags mouseButtonFlags =
 		SDL_GetGlobalMouseState(&input->cursorPosition.x, &input->cursorPosition.y);
 
 	input->actions[MWHEEL].axis = 0.0f;
-	input->actions[M0].pushed = mouseButtonMask & SDL_BUTTON_LMASK;
-	input->actions[M1].pushed = mouseButtonMask & SDL_BUTTON_RMASK;
+	input->actions[M0].pushed = mouseButtonFlags & SDL_BUTTON_LMASK;
+	input->actions[M1].pushed = mouseButtonFlags & SDL_BUTTON_RMASK;
 	input->actions[DEL].pushed = input->sdl_keys[SDL_SCANCODE_DELETE];
 	input->actions[D].pushed = input->sdl_keys[SDL_SCANCODE_D];
 	input->actions[F].pushed = input->sdl_keys[SDL_SCANCODE_F];
