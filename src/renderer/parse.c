@@ -9,6 +9,7 @@
 #include "file.h"
 #include "load.h"
 #include "../game/transform.c"
+#include "../arena.h"
 
 #define SEP ": "
 #define INDENT "    "
@@ -71,14 +72,14 @@ void skip_white_space(const char *str, size_t *index)
 	}
 }
 
-struct token *scene_get_tokens(char *filename, size_t *num_tokens)
+struct token *scene_get_tokens(char *filename, size_t *num_tokens, struct arena *arena)
 {
 	size_t token_index = 0;
 	size_t str_index = 0;
 	size_t file_length;
 
 	const char *str = read_file(filename);
-	struct token *tokens = malloc(sizeof(*tokens) * 40000);
+	struct token *tokens = alloc_struct(arena, typeof(*tokens), 40000);
 	struct token *current_token = &tokens[token_index];
 	enum token_type next_type = TYPE;
 
@@ -162,58 +163,58 @@ void write_indent(FILE *f, int level)
 
 void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_entity, int indent_level)
 {
-	struct entity *e = current_entity;
-	while (e) {
+	while (current_entity) {
 		fprintf(f, "%s %s", ENTITY_TYPE, OPEN);
 		indent_level++;
 		write_indent(f, indent_level);
-		fprintf(f, "%s%s%u\n", ENTITY_ID, SEP, e->id);
+		fprintf(f, "%s%s%u\n", ENTITY_ID, SEP, current_entity->id);
 		write_indent(f, indent_level);
-		fprintf(f, "%s%s%s\n", ENTITY_NAME, SEP, e->name);
+		fprintf(f, "%s%s%s\n", ENTITY_NAME, SEP, current_entity->name);
 		write_indent(f, indent_level);
 		fprintf(f, "%s %s", TRANSFORM_TYPE, OPEN);
 		indent_level++;
 		write_indent(f, indent_level);
-		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_POS, SEP, e->transform->pos.x, e->transform->pos.y,
-			e->transform->pos.z);
+		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_POS, SEP, current_entity->transform->pos.x,
+			current_entity->transform->pos.y, current_entity->transform->pos.z);
 		write_indent(f, indent_level);
-		fprintf(f, "%s%s%f, %f, %f, %f\n", TRANSFORM_ROT, SEP, e->transform->rot.x, e->transform->rot.y,
-			e->transform->rot.z, e->transform->rot.w);
+		fprintf(f, "%s%s%f, %f, %f, %f\n", TRANSFORM_ROT, SEP, current_entity->transform->rot.x,
+			current_entity->transform->rot.y, current_entity->transform->rot.z,
+			current_entity->transform->rot.w);
 		write_indent(f, indent_level);
-		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_SCALE, SEP, e->transform->scale.x, e->transform->scale.y,
-			e->transform->scale.z);
+		fprintf(f, "%s%s%f, %f, %f\n", TRANSFORM_SCALE, SEP, current_entity->transform->scale.x,
+			current_entity->transform->scale.y, current_entity->transform->scale.z);
 		indent_level--;
 		write_indent(f, indent_level);
 		fprintf(f, "%s", CLOSE);
 
-		if (e->camera) {
+		if (current_entity->camera) {
 			write_indent(f, indent_level);
 			fprintf(f, "%s %s", CAMERA_TYPE, OPEN);
 			indent_level++;
 			write_indent(f, indent_level);
-			fprintf(f, "%s%s%f\n", CAMERA_FOV, SEP, e->camera->fov);
+			fprintf(f, "%s%s%f\n", CAMERA_FOV, SEP, current_entity->camera->fov);
 			write_indent(f, indent_level);
-			fprintf(f, "%s%s%f\n", CAMERA_NEAR, SEP, e->camera->near_plane);
+			fprintf(f, "%s%s%f\n", CAMERA_NEAR, SEP, current_entity->camera->near_plane);
 			write_indent(f, indent_level);
-			fprintf(f, "%s%s%f\n", CAMERA_FAR, SEP, e->camera->far_plane);
+			fprintf(f, "%s%s%f\n", CAMERA_FAR, SEP, current_entity->camera->far_plane);
 			indent_level--;
 			write_indent(f, indent_level);
 			fprintf(f, "%s", CLOSE);
 		}
 
-		if (e->renderer) {
+		if (current_entity->renderer) {
 			write_indent(f, indent_level);
 			fprintf(f, "%s %s", MESH_RENDERER_TYPE, OPEN);
 			indent_level++;
 			write_indent(f, indent_level);
-			fprintf(f, "%s%s %s\n", MESH_RENDERER_MESH, SEP, e->renderer->mesh->name);
+			fprintf(f, "%s%s %s\n", MESH_RENDERER_MESH, SEP, current_entity->renderer->mesh->name);
 			write_indent(f, indent_level);
 			fprintf(f, "%s%s", MESH_RENDERER_MATS, SEP);
-			for (int k = 0; k < e->renderer->mesh->num_sub_meshes; k++) {
-				if (k == e->renderer->mesh->num_sub_meshes - 1) {
-					fprintf(f, "%s\n", e->renderer->mesh->sub_meshes[k].mat->name);
+			for (int k = 0; k < current_entity->renderer->mesh->num_sub_meshes; k++) {
+				if (k == current_entity->renderer->mesh->num_sub_meshes - 1) {
+					fprintf(f, "%s\n", current_entity->renderer->mesh->sub_meshes[k].mat->name);
 				} else {
-					fprintf(f, "%s, ", e->renderer->mesh->sub_meshes[k].mat->name);
+					fprintf(f, "%s, ", current_entity->renderer->mesh->sub_meshes[k].mat->name);
 				}
 			}
 			indent_level--;
@@ -221,11 +222,11 @@ void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_ent
 			fprintf(f, "%s", CLOSE);
 		}
 
-		if (e->children) {
-			scene_write_entity(scene, f, e->children, indent_level + 1);
+		if (current_entity->children) {
+			scene_write_entity(scene, f, current_entity->children, indent_level + 1);
 		}
 
-		e = e->next;
+		current_entity = current_entity->next;
 		indent_level--;
 	}
 
@@ -246,15 +247,9 @@ void scene_write(struct scene *scene)
 	fclose(f);
 }
 
-// struct token *get_next_token(struct token *tokens, size_t *count)
-// {
-// 	*count = *count + 1;
-// 	struct token *next_token =
-// }
-
-struct token_block *get_new_block()
+struct token_block *get_new_block(struct arena *arena)
 {
-	struct token_block *b = malloc(sizeof(*b));
+	struct token_block *b = alloc_struct(arena, typeof(*b), 1);
 	b->type = 0;
 	b->pair_list = NULL;
 	b->next = NULL;
@@ -263,16 +258,17 @@ struct token_block *get_new_block()
 	return b;
 }
 
-struct token_pair *get_new_pair()
+struct token_pair *get_new_pair(struct arena *arena)
 {
-	struct token_pair *p = malloc(sizeof(*p));
+	struct token_pair *p = alloc_struct(arena, typeof(*p), 1);
 	p->field = NULL;
 	p->value = NULL;
 	p->next = NULL;
 	return p;
 }
 
-struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens, size_t num_tokens)
+struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens, size_t num_tokens,
+				       struct arena *arena)
 {
 	struct token *current_token;
 	struct token_block *current_block = NULL;
@@ -285,40 +281,40 @@ struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens
 		case TYPE:
 			if (current_block) {
 				if (current_parent) {
-					struct token_block *new_block = get_new_block();
+					struct token_block *new_block = get_new_block(arena);
 					new_block->next = current_parent->children;
 					new_block->parent = current_parent;
 					current_parent->children = new_block;
 					current_block = new_block;
 				} else {
-					struct token_block *new_block = get_new_block();
+					struct token_block *new_block = get_new_block(arena);
 					new_block->next = current_block;
 					current_block = new_block;
 				}
 			} else {
-				current_block = get_new_block();
+				current_block = get_new_block(arena);
 			}
 
 			current_parent = current_block;
 
-			if (strcmp(current_token->data, ENTITY_TYPE) == 0) {
+			if (!strcmp(current_token->data, ENTITY_TYPE)) {
 				current_block->type = ENTITY;
-			} else if (strcmp(current_token->data, TRANSFORM_TYPE) == 0) {
+			} else if (!strcmp(current_token->data, TRANSFORM_TYPE)) {
 				current_block->type = TRANSFORM;
-			} else if (strcmp(current_token->data, CAMERA_TYPE) == 0) {
+			} else if (!strcmp(current_token->data, CAMERA_TYPE)) {
 				current_block->type = CAMERA;
-			} else if (strcmp(current_token->data, MESH_RENDERER_TYPE) == 0) {
+			} else if (!strcmp(current_token->data, MESH_RENDERER_TYPE)) {
 				current_block->type = MESH_RENDERER;
 			}
 
 			break;
 		case FIELD:
 			if (current_block->pair_list) {
-				struct token_pair *new_pair = get_new_pair();
+				struct token_pair *new_pair = get_new_pair(arena);
 				new_pair->next = current_block->pair_list;
 				current_block->pair_list = new_pair;
 			} else {
-				struct token_pair *new_pair = get_new_pair();
+				struct token_pair *new_pair = get_new_pair(arena);
 				current_block->pair_list = new_pair;
 			}
 
@@ -348,7 +344,7 @@ struct mesh *find_mesh(struct resources *res, const char *mesh_name)
 {
 	for (int i = 0; i < res->num_meshes; i++) {
 		struct mesh *m = &res->meshes[i];
-		if (strcmp(mesh_name, m->name) == 0) {
+		if (!strcmp(mesh_name, m->name)) {
 			return m;
 		}
 	}
@@ -358,24 +354,22 @@ struct mesh *find_mesh(struct resources *res, const char *mesh_name)
 }
 
 void create_scene(struct scene *scene, struct game *game, struct resources *res, struct token_block *blocks,
-		  struct entity *current_entity, struct entity *current_parent)
+		  struct entity *current_entity)
 {
-	struct token_block *current_block = blocks;
-	struct token_pair *current_pair = current_block->pair_list;
-	struct entity *new_entity;
+	struct entity *parent_entity = current_entity;
 
-	while (current_block) {
-		current_pair = current_block->pair_list;
-		switch (current_block->type) {
+	while (blocks) {
+		struct token_pair *current_pair = blocks->pair_list;
+
+		switch (blocks->type) {
 		case ENTITY:
-			new_entity = game->get_new_entity(scene);
-			game->entity_set_parent(new_entity, current_parent);
-			current_entity = new_entity;
+			current_entity = game->get_new_entity(scene);
+			game->entity_set_parent(current_entity, parent_entity);
 
 			while (current_pair) {
-				if (strcmp(current_pair->field->data, ENTITY_NAME) == 0) {
+				if (!strcmp(current_pair->field->data, ENTITY_NAME)) {
 					snprintf(current_entity->name, 128, "%s", current_pair->value->data);
-				} else if (strcmp(current_pair->field->data, ENTITY_ID) == 0) {
+				} else if (!strcmp(current_pair->field->data, ENTITY_ID)) {
 					current_entity->id = atoi(current_pair->value->data);
 				}
 
@@ -384,7 +378,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 			break;
 		case TRANSFORM:
 			while (current_pair) {
-				if (strcmp(current_pair->field->data, TRANSFORM_POS) == 0) {
+				if (!strcmp(current_pair->field->data, TRANSFORM_POS)) {
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					vec3s pos = (vec3s){ 0.0f, 0.0f, 0.0f };
@@ -395,7 +389,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 					}
 
 					set_position(current_entity->transform, pos);
-				} else if (strcmp(current_pair->field->data, TRANSFORM_ROT) == 0) {
+				} else if (!strcmp(current_pair->field->data, TRANSFORM_ROT)) {
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					versors rot = (versors){ 0.0f, 0.0f, 0.0f, 1.0f };
@@ -405,7 +399,7 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 						token = strtok(NULL, ",");
 					}
 					set_rotation(current_entity->transform, rot);
-				} else if (strcmp(current_pair->field->data, TRANSFORM_SCALE) == 0) {
+				} else if (!strcmp(current_pair->field->data, TRANSFORM_SCALE)) {
 					char *token = strtok(current_pair->value->data, ",");
 					u32 index = 0;
 					vec3s scale = (vec3s){ 1.0f, 1.0f, 1.0f };
@@ -422,11 +416,11 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 		case CAMERA:
 			game->add_camera(scene, current_entity);
 			while (current_pair) {
-				if (strcmp(current_pair->field->data, CAMERA_FOV) == 0) {
+				if (!strcmp(current_pair->field->data, CAMERA_FOV)) {
 					current_entity->camera->fov = strtof(current_pair->value->data, NULL);
-				} else if (strcmp(current_pair->field->data, CAMERA_NEAR) == 0) {
+				} else if (!strcmp(current_pair->field->data, CAMERA_NEAR)) {
 					current_entity->camera->near_plane = strtof(current_pair->value->data, NULL);
-				} else if (strcmp(current_pair->field->data, CAMERA_FAR) == 0) {
+				} else if (!strcmp(current_pair->field->data, CAMERA_FAR)) {
 					current_entity->camera->far_plane = strtof(current_pair->value->data, NULL);
 				}
 				current_pair = current_pair->next;
@@ -436,32 +430,32 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 		case MESH_RENDERER:
 			game->add_renderer(scene, current_entity);
 			while (current_pair) {
-				if (strcmp(current_pair->field->data, MESH_RENDERER_MESH) == 0) {
+				if (!strcmp(current_pair->field->data, MESH_RENDERER_MESH)) {
 					current_entity->renderer->mesh = find_mesh(res, current_pair->value->data);
-				} else if (strcmp(current_pair->field->data, MESH_RENDERER_MATS) == 0) {
+				} else if (!strcmp(current_pair->field->data, MESH_RENDERER_MATS)) {
 				}
 				current_pair = current_pair->next;
 			}
 			break;
 		}
 
-		struct token_block *child_block = current_block->children;
-		if (child_block) {
-			create_scene(scene, game, res, child_block, current_entity, current_entity);
+		if (blocks->children) {
+			create_scene(scene, game, res, blocks->children, current_entity);
 		}
 
-		current_block = current_block->next;
-		current_entity = current_parent;
+		blocks = blocks->next;
+		current_entity = parent_entity;
 	}
 }
 
 void scene_load(struct scene *scene, struct game *game, struct resources *res, char *filename)
 {
+	struct arena temp_arena = get_new_arena((size_t)1 << 30);
 	size_t num_tokens;
-	struct token *tokens = scene_get_tokens(filename, &num_tokens);
-	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens);
-	create_scene(scene, game, res, blocks, NULL, NULL);
-	free(tokens);
+	struct token *tokens = scene_get_tokens(filename, &num_tokens, &temp_arena);
+	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens, &temp_arena);
+	create_scene(scene, game, res, blocks, NULL);
+	arena_free(&temp_arena);
 }
 
 struct token *mesh_info_get_tokens(char *filename, size_t *num_tokens)
