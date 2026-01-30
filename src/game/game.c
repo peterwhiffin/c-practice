@@ -18,6 +18,8 @@
 
 static struct transform *add_transform(struct scene *scene, struct entity *entity)
 {
+	if (!entity)
+		printf("entity is null\n");
 	struct transform *t = &scene->transforms[scene->num_transforms];
 	t->entity = entity;
 	entity->transform = t;
@@ -234,6 +236,13 @@ void init_scene(struct scene *scene, struct resources *res)
 	// }
 }
 
+// vec3s (*get_up)(struct transform *t);
+// vec3s (*get_forward)(struct transform *t);
+// vec3s (*get_right)(struct transform *t);
+// void (*set_position)(struct transform *t, vec3s pos);
+// void (*set_rotation)(struct transform *t, versors rot);
+// void (*set_scale)(struct transform *t, vec3s scale);
+// void (*set_euler_angles)(struct transform *t, vec3s angles);
 PETE_API void load_game_functions(struct game *game)
 {
 	game->init_scene = init_scene;
@@ -244,4 +253,11 @@ PETE_API void load_game_functions(struct game *game)
 	game->add_renderer = add_renderer;
 	game->entity_unset_parent = entity_unset_parent;
 	game->entity_set_parent = entity_set_parent;
+	game->get_up = get_up;
+	game->get_forward = get_forward;
+	game->get_right = get_right;
+	game->set_position = set_position;
+	game->set_rotation = set_rotation;
+	game->set_scale = set_scale;
+	game->set_euler_angles = set_euler_angles;
 }

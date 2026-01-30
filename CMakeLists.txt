@@ -9,6 +9,7 @@ target_include_directories(dummy PRIVATE
     "${CMAKE_SOURCE_DIR}/../freetype/include"
     "${CMAKE_SOURCE_DIR}/../SDL/include"
     "${CMAKE_SOURCE_DIR}/../glad/include"
+    "${CMAKE_SOURCE_DIR}/../JoltPhysics-5.3.0"
 )
 
 target_compile_definitions(dummy PRIVATE HOT)

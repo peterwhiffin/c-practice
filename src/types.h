@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -7,6 +8,7 @@
 #include "SDL3/SDL_events.h"
 #include "cglm/types-struct.h"
 #include "cglm/types.h"
+#include "physics/physics.h"
 #ifdef NO_GLAD
 #else
 #include "glad/glad.h"
@@ -143,6 +145,10 @@ struct mesh {
 	char name[256];
 	struct sub_mesh *sub_meshes;
 	u32 num_sub_meshes;
+	vec3s max;
+	vec3s min;
+	vec3s center;
+	vec3s extent;
 };
 
 struct model_import {
@@ -224,6 +230,7 @@ struct entity {
 	struct entity *next;
 	struct transform *transform;
 	struct mesh_renderer *renderer;
+	struct physics_body *body;
 	struct camera *camera;
 };
 
@@ -235,12 +242,14 @@ struct scene {
 	struct entity *preview_model;
 	struct transform *transforms;
 	struct mesh_renderer *renderers;
+	struct physics_body *bodies;
 	struct camera *cameras;
 	struct entity *entities;
 	size_t num_entities;
 	size_t num_transforms;
 	size_t num_renderers;
 	size_t num_cameras;
+	size_t num_bodies;
 	float move_speed;
 	float move_mod;
 	float look_sens;
@@ -317,19 +326,31 @@ struct game {
 	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
 	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
 	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
+	vec3s (*get_up)(struct transform *t);
+	vec3s (*get_forward)(struct transform *t);
+	vec3s (*get_right)(struct transform *t);
+	void (*set_position)(struct transform *t, vec3s pos);
+	void (*set_rotation)(struct transform *t, versors rot);
+	void (*set_scale)(struct transform *t, vec3s scale);
+	void (*set_euler_angles)(struct transform *t, vec3s angles);
 };
 
 struct physics {
-	void *lib_handle;
-	void (*load_functions)(struct physics *);
-	void (*step_physics)(struct physics *, float);
+	struct physics_world *physics_world;
 	float time_accum;
+	void *lib_handle;
+	struct physics *(*load_functions)(struct physics *);
+	void (*physics_init)(struct physics *physics, struct scene *scene, struct arena *arena);
+	void (*step_physics)(struct physics *physics, struct scene *scene, struct game *game, float dt);
+	struct physics_body *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
+					      bool is_static);
 };
 
 struct editor {
 	struct game *game;
 	struct scene *scene;
 	struct renderer *ren;
+	struct physics *physics;
 	struct window *win;
 	struct resources *res;
 	struct input *input;

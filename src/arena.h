@@ -7,4 +7,8 @@ void *alloc(struct arena *arena, size_t size, size_t alignment);
 void arena_free(struct arena *arena);
 void arena_clear(struct arena *arena);
 
+#if defined(__linux__)
 #define alloc_struct(arena, type, count) (type *)alloc((arena), sizeof(type) * (count), _Alignof(type))
+#elif defined(_WIN32)
+#define alloc_struct(arena, type, count) (type *)alloc((arena), sizeof(type) * (count), alignof(type))
+#endif

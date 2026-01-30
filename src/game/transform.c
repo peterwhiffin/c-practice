@@ -1,10 +1,11 @@
+
+#define CGLM_USE_ANONYMOUS_STRUCT 1
 #include "transform.h"
 #include "cglm/struct/euler.h"
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/quat.h"
 #include "cglm/struct/vec3.h"
 #include "cglm/types-struct.h"
-#include "../types.h"
 #include "cglm/util.h"
 
 float vec3_magnitude(vec3s v)

@@ -9,7 +9,7 @@ struct arena get_new_arena(size_t size)
 	struct arena a;
 	a.pos = 0;
 	a.size = size;
-	a.mem = malloc(size);
+	a.mem = (u8 *)malloc(size);
 	if (a.mem == NULL) {
 		printf("ERROR::MALLOC::%s\n", strerror(errno));
 	}

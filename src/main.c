@@ -158,6 +158,7 @@ int main()
 	editor->win = win;
 	editor->scene = scene;
 	editor->game = game;
+	editor->physics = physics;
 
 	window_init(win, input);
 	load_game_lib(game);
@@ -169,6 +170,7 @@ int main()
 	ren->init_renderer(ren, &render_arena, win);
 	ren->load_resources(res, ren, &render_arena);
 	game->init_scene(scene, res);
+	physics->physics_init(physics, scene, &main_arena);
 	editor->init_editor(win, editor);
 
 	scene_load(scene, game, res, "test.scene");
@@ -179,7 +181,7 @@ int main()
 		update_time(scene);
 		check_input(input);
 		poll_events(win, input, ren, editor, &render_arena);
-		physics->step_physics(physics, scene->dt);
+		physics->step_physics(physics, scene, game, scene->dt);
 		game->update(scene, input, res, ren, win);
 		ren->draw_scene(ren, res, scene, win);
 		editor->update_editor(editor);

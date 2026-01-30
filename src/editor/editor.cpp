@@ -1,7 +1,3 @@
-// #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
-#include "cglm/struct/vec3.h"
-#include "cglm/types.h"
-#include <wchar.h>
 #define NO_GLAD
 #include "./imgui.cpp"
 #include "./imgui_demo.cpp"
@@ -17,12 +13,6 @@
 
 #include "../types.h"
 #include "SDL3/SDL_events.h"
-#include "cglm/struct/euler.h"
-#include "cglm/struct/quat.h"
-#include "cglm/types-struct.h"
-// #include "cglm/types.h"
-#include "cglm/util.h"
-#include "../game/transform.c"
 
 void scene_view_draw(struct editor *editor)
 {
@@ -63,6 +53,23 @@ void debug_draw(struct editor *editor)
 	ImGui::End();
 }
 
+void inspector_draw_add_component(struct editor *editor, struct entity *e)
+{
+	if (ImGui::BeginCombo("##Add Component", "Add Component")) {
+		const bool is_selected = false;
+		if (!e->body) {
+			if (ImGui::Selectable("Rigidbody - static", is_selected)) {
+				e->body = editor->physics->add_rigidbody(editor->physics, editor->scene, e, true);
+			}
+
+			if (ImGui::Selectable("Rigidbody - dynamic", is_selected)) {
+				e->body = editor->physics->add_rigidbody(editor->physics, editor->scene, e, false);
+			}
+		}
+		ImGui::EndCombo();
+	}
+}
+
 void inspector_draw_entity(struct editor *editor, struct entity *e)
 {
 	ImGui::Text("%s", e->name);
@@ -70,13 +77,15 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 	vec3s euler_angles = e->transform->euler_angles;
 
 	if (ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f)) {
-		set_position(e->transform, e->transform->pos);
+		editor->game->set_position(e->transform, e->transform->pos);
 	}
+
 	if (ImGui::DragFloat3("rot", &euler_angles.x, 0.01f)) {
-		set_euler_angles(e->transform, euler_angles);
+		editor->game->set_euler_angles(e->transform, euler_angles);
 	}
+
 	if (ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f)) {
-		set_scale(e->transform, e->transform->scale);
+		editor->game->set_scale(e->transform, e->transform->scale);
 	}
 
 	if (e->camera) {
@@ -90,7 +99,7 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 	}
 
 	if (e->renderer) {
-		if (ImGui::CollapsingHeader("Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::CollapsingHeader("Renderer Thing", ImGuiTreeNodeFlags_DefaultOpen)) {
 			// ImGui::Text("%s", e->renderer->mesh->name);
 
 			if (ImGui::BeginCombo("mesh", e->renderer->mesh->name)) {
@@ -110,26 +119,12 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 		}
 	}
 
-	if (ImGui::Button("Add child", ImVec2(100, 70))) {
-		struct entity *new_entity = editor->game->get_new_entity(editor->scene);
-		editor->game->add_renderer(editor->scene, new_entity);
-		new_entity->renderer->mesh = &editor->res->meshes[0];
-		editor->game->entity_set_parent(new_entity, e);
-	}
-
-	if (e->parent && ImGui::Button("Remove parent", ImVec2(100, 70))) {
-		editor->game->entity_unset_parent(e);
-	}
-
-	struct entity *child = e->children;
-	if (!child) {
-		ImGui::Text("%s", "NO CHILDREN");
-	} else {
-		while (child) {
-			ImGui::Text("%s", child->name);
-			child = child->next;
+	if (e->body) {
+		if (ImGui::CollapsingHeader("Rigidbody", ImGuiTreeNodeFlags_DefaultOpen)) {
 		}
 	}
+
+	inspector_draw_add_component(editor, e);
 }
 
 void draw_tree_node(struct editor *editor, struct entity *entity)

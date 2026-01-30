@@ -1,3 +1,6 @@
+#include "cglm/struct/vec3-ext.h"
+#include "cglm/struct/vec3.h"
+#include "cglm/types-struct.h"
 #define STB_IMAGE_IMPLEMENTATION
 
 #include "../types.h"
@@ -434,6 +437,8 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 				v->normal.z = normal.z;
 				v->uv.x = uv.x;
 				v->uv.y = uv.y;
+				mesh->max = glms_vec3_maxv(mesh->max, v->pos);
+				mesh->min = glms_vec3_minv(mesh->min, v->pos);
 			}
 		}
 
@@ -458,6 +463,8 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 			free(vertices);
 	}
 
+	mesh->center = glms_vec3_scale(glms_vec3_add(mesh->min, mesh->max), 0.5f);
+	mesh->extent = glms_vec3_scale(glms_vec3_sub(mesh->max, mesh->min), 0.5f);
 	res->num_meshes++;
 }
 
@@ -496,6 +503,8 @@ void reload_model(struct resources *res, struct renderer *ren, struct model_impo
 		ufbx_mesh *node_mesh = node->mesh;
 		struct mesh_info *current_mesh_info = get_mesh_info(res, node->name.data);
 
+		mesh->max = (vec3s){ 0.0f, 0.0f, 0.0f };
+		mesh->min = (vec3s){ 0.0f, 0.0f, 0.0f };
 		create_mesh(res, ren, mesh, node, node_mesh);
 		mesh_count++;
 	}

@@ -7,7 +7,7 @@
 #if defined(__linux__)
 #include <dirent.h>
 #elif defined(_WIN32)
-#inclue < windows.h>
+#include <windows.h>
 #endif
 
 const char *read_file(char *filename)
@@ -32,10 +32,24 @@ void get_extension(char *ext, char *path)
 	snprintf(ext, 256, "%s", dot + 1);
 }
 
+// void get_filename(char *name, const char *path)
+// {
+// 	char *slash = strrchr(path, '/');
+// 	snprintf(name, 256, "%s", slash + 1);
+// }
+
 void get_filename(char *name, const char *path)
 {
 	char *slash = strrchr(path, '/');
-	snprintf(name, 256, "%s", slash + 1);
+	char *back_slash = strrchr(path, '\\');
+
+	if (back_slash) {
+		snprintf(name, 256, "%s", back_slash + 1);
+	} else if (slash) {
+		snprintf(name, 256, "%s", slash + 1);
+	} else {
+		snprintf(name, 256, "%s", path);
+	}
 }
 
 void get_filename_no_ext(char *name, const char *path)

@@ -2,20 +2,20 @@
 #include <iso646.h>
 #include <stddef.h>
 #include <string.h>
-#include <sys/poll.h>
-#include <dlfcn.h>
 #include "stdio.h"
-#include "syscall.h"
-#include "unistd.h"
-#include "poll.h"
 #include "renderer/load.h"
 #include "types.h"
 
 #if defined(__linux__)
+#include "poll.h"
+#include "unistd.h"
+#include "syscall.h"
+#include <dlfcn.h>
+#include <sys/poll.h>
 #include "sys/inotify.h"
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define BUF_LEN (1024 * (EVENT_SIZE + 16))
-#elif define(_WIN32)
+#elif defined(_WIN32)
 // #define EVENT_SIZE (sizeof(struct inotify_event))
 // #define BUF_LEN (1024 * (EVENT_SIZE + 16))
 #define BUF_LEN (1024)
