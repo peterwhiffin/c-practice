@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#define PHYSICS_INTERNAL
 #define JPH_DEBUG_RENDERER
 #include <Jolt/Jolt.h>
 #include <Jolt/Math/Real.h>
@@ -17,6 +19,9 @@
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Renderer/DebugRendererSimple.h>
+#include <vector>
+#include "cglm/struct.h"
+#include "physics.h"
 
 namespace Layers
 {
@@ -67,17 +72,6 @@ class MyBroadPhaseLayerInterface final : public JPH::BroadPhaseLayerInterface {
 class MyObjectVsBroadPhaseLayerFilter : public JPH::ObjectVsBroadPhaseLayerFilter {
     public:
 	virtual bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override;
-};
-
-struct DebugLine {
-	JPH::Vec3 start;
-	JPH::Vec3 end;
-	JPH::Color color;
-};
-
-struct DebugTri {
-	JPH::Vec3 v0, v1, v2;
-	JPH::Color color;
 };
 
 class MyDebugRenderer : public JPH::DebugRendererSimple {

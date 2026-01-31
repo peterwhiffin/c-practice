@@ -4,10 +4,12 @@
 #include "cglm/types-struct.h"
 #include "physics_internal.hpp"
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <thread>
 
 #include "../arena.c"
+#include <vector>
 
 #include <Jolt/Renderer/DebugRenderer.cpp>
 #include <Jolt/Renderer/DebugRendererSimple.cpp>
@@ -42,8 +44,22 @@ void step_physics(struct physics *physics, struct scene *scene, struct game *gam
 		}
 	}
 
-	physics->physics_world->physicsSystem->DrawBodies(physics->physics_world->debug_renderer->mBodyDrawSettings,
-							  physics->physics_world->debug_renderer);
+	physics->physics_world->debug_renderer->lines.clear();
+	physics->physics_world->debug_renderer->triangles.clear();
+	physics->num_lines = 0;
+	physics->num_tris = 0;
+
+	if (physics->draw_debug) {
+		physics->physics_world->physicsSystem->DrawBodies(
+			physics->physics_world->debug_renderer->mBodyDrawSettings,
+			physics->physics_world->debug_renderer);
+
+		physics->lines = physics->physics_world->debug_renderer->lines.data();
+		physics->num_lines = physics->physics_world->debug_renderer->lines.size();
+
+		physics->tris = physics->physics_world->debug_renderer->triangles.data();
+		physics->num_tris = physics->physics_world->debug_renderer->triangles.size();
+	}
 }
 
 static void TraceImpl(const char *inFMT, ...)
@@ -124,19 +140,78 @@ static bool AssertFailedImpl(const char *inExpression, const char *inMessage, co
 
 void MyDebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor)
 {
-	lines.push_back({ inFrom, inTo, inColor });
+	DebugLine line;
+	line.start = (vec3s){ inFrom.GetX(), inFrom.GetY(), inFrom.GetZ() };
+	line.end = (vec3s){ inTo.GetX(), inTo.GetY(), inTo.GetZ() };
+	line.color[0] = inColor.r;
+	line.color[1] = inColor.g;
+	line.color[2] = inColor.b;
+	line.color[3] = inColor.a;
+
+	lines.push_back(line);
 }
 
 void MyDebugRenderer::DrawTriangle(JPH::RVec3Arg inV1, const JPH::RVec3Arg inV2, const JPH::RVec3Arg inV3,
 				   JPH::ColorArg inColor, ECastShadow inCastShadow)
 {
-	triangles.push_back({ inV1, inV2, inV3, inColor });
+	DebugTri tri;
+	tri.v0 = (vec3s){ inV1.GetX(), inV1.GetY(), inV1.GetZ() };
+	tri.v1 = (vec3s){ inV2.GetX(), inV2.GetY(), inV2.GetZ() };
+	tri.v2 = (vec3s){ inV3.GetX(), inV3.GetY(), inV3.GetZ() };
+	tri.color[0] = inColor.r;
+	tri.color[1] = inColor.g;
+	tri.color[2] = inColor.b;
+	tri.color[3] = inColor.a;
+	triangles.push_back(tri);
 }
 
 void MyDebugRenderer::DrawText3D(JPH::RVec3Arg inPosition, const std::string_view &inString, JPH::ColorArg inColor,
 				 float inHeight)
 {
 	// Implement
+}
+
+void physics_add_force(struct physics *physics, struct physics_body *body, vec3s force)
+{
+	// physics->physics_world->bodyInterface->AddForce(body->jolt_body, Vec3(force.x, force.y, force.z),
+	// 						JPH::EActivation::Activate);
+
+	physics->physics_world->bodyInterface->SetLinearVelocity(body->jolt_body, Vec3(force.x, force.y, force.z));
+}
+
+struct physics_body *add_sphere_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
+					  bool is_static)
+{
+	struct physics_body *r = &scene->bodies[scene->num_bodies];
+	entity->body = r;
+	r->entity = entity;
+	scene->num_bodies++;
+
+	JPH::Vec3 extent = JPH::Vec3(0.5f, 0.5f, 0.5f);
+
+	if (entity->renderer) {
+		struct mesh *mesh = entity->renderer->mesh;
+		extent.SetX(mesh->extent.x * entity->transform->scale.x);
+		extent.SetY(mesh->extent.y * entity->transform->scale.y);
+		extent.SetZ(mesh->extent.z * entity->transform->scale.z);
+	}
+
+	JPH::BodyInterface *body_interface = physics->physics_world->bodyInterface;
+	// JPH::BoxShapeSettings box_settings(extent);
+	JPH::SphereShapeSettings sphere_settings(extent.GetX());
+	JPH::ShapeSettings::ShapeResult shape_result = sphere_settings.Create();
+	JPH::ShapeRefC shape = shape_result.Get();
+	JPH::EMotionType motion_type = is_static ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
+	ObjectLayer layer = is_static ? Layers::NON_MOVING : Layers::MOVING;
+	JPH::BodyCreationSettings body_settings(shape, JPH::RVec3(0.0_r, 0.0_r, 0.0_r), JPH::Quat::sIdentity(),
+						motion_type, layer);
+	body_settings.mAllowDynamicOrKinematic = true;
+	JPH::Body *body = body_interface->CreateBody(body_settings);
+	body_interface->AddBody(body->GetID(), JPH::EActivation::Activate);
+	entity->body->jolt_body = body->GetID();
+	Vec3 inPos = Vec3(entity->transform->pos.x, entity->transform->pos.y, entity->transform->pos.z);
+	body_interface->SetPosition(entity->body->jolt_body, inPos, JPH::EActivation::Activate);
+	return r;
 }
 
 struct physics_body *add_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity, bool is_static)
@@ -196,6 +271,14 @@ void physics_init(struct physics *physics, struct scene *scene, struct arena *ar
 	physics_world->physicsSystem->SetGravity(JPH::Vec3(0.0f, -18.0f, 0.0f));
 	physics_world->bodyInterface = &physics_world->physicsSystem->GetBodyInterface();
 	physics_world->debug_renderer = new MyDebugRenderer();
+	physics_world->debug_renderer->mBodyDrawSettings.mDrawShape = true;
+	physics_world->debug_renderer->mBodyDrawSettings.mDrawShapeWireframe = true;
+	physics_world->debug_renderer->mBodyDrawSettings.mDrawShapeColor =
+		JPH::BodyManager::EShapeColor::MotionTypeColor;
+
+	// drawSettings.mDrawShape = true;
+	// drawSettings.mDrawShapeWireframe = true;
+	// drawSettings.mDrawShapeColor = JPH::BodyManager::EShapeColor::MotionTypeColor;
 	DebugRenderer::sInstance = physics_world->debug_renderer;
 }
 
@@ -204,4 +287,6 @@ extern "C" PETE_API void load_physics_functions(struct physics *physics)
 	physics->step_physics = step_physics;
 	physics->physics_init = physics_init;
 	physics->add_rigidbody = add_rigidbody;
+	physics->add_sphere_rigidbody = add_sphere_rigidbody;
+	physics->physics_add_force = physics_add_force;
 }

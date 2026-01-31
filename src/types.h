@@ -91,6 +91,7 @@ enum key_actions {
 	DEL,
 	D,
 	F,
+	L,
 	P,
 	ESC,
 	ACTION_COUNT
@@ -150,6 +151,11 @@ struct mesh {
 	vec3s center;
 	vec3s extent;
 };
+
+// struct DebugTri {
+// 	vec3s v0, v1, v2;
+// 	vec4s color;
+// };
 
 struct model_import {
 	struct file_info file_info;
@@ -271,19 +277,73 @@ struct texture_list {
 	struct texture *next;
 };
 
+struct DebugVertex {
+	vec3s pos;
+	vec4s color;
+};
+
+struct renderer;
+struct physics;
+
+struct game {
+	float spawn_force;
+	void *lib_handle;
+	void (*load_functions)(struct game *);
+	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *,
+		       struct physics *phys, struct game *game);
+	void (*init_scene)(struct scene *, struct resources *);
+	void (*entity_unset_parent)(struct entity *child);
+	void (*entity_set_parent)(struct entity *child, struct entity *parent);
+	struct entity *(*get_new_entity)(struct scene *scene);
+	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
+	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
+	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
+	vec3s (*get_up)(struct transform *t);
+	vec3s (*get_forward)(struct transform *t);
+	vec3s (*get_right)(struct transform *t);
+	void (*set_position)(struct transform *t, vec3s pos);
+	void (*set_rotation)(struct transform *t, versors rot);
+	void (*set_scale)(struct transform *t, vec3s scale);
+	void (*set_euler_angles)(struct transform *t, vec3s angles);
+};
+
+struct physics {
+	struct physics_world *physics_world;
+	bool draw_debug;
+	float time_accum;
+	struct DebugLine *lines;
+	struct DebugTri *tris;
+	size_t num_lines;
+	size_t num_tris;
+	void *lib_handle;
+	struct physics *(*load_functions)(struct physics *);
+	void (*physics_init)(struct physics *physics, struct scene *scene, struct arena *arena);
+	void (*step_physics)(struct physics *physics, struct scene *scene, struct game *game, float dt);
+	struct physics_body *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
+					      bool is_static);
+
+	struct physics_body *(*add_sphere_rigidbody)(struct physics *physics, struct scene *scene,
+						     struct entity *entity, bool is_static);
+
+	void (*physics_add_force)(struct physics *physics, struct physics_body *body, vec3s force);
+};
+
 struct renderer {
 	void *lib_handle;
 	void (*load_functions)(struct renderer *, void *);
 	void (*test_renderer)(struct renderer *, struct window *);
 	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
 	void (*window_resized)(struct renderer *, struct window *, struct arena *);
-	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *);
+	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *,
+			   struct physics *phys);
 	void (*draw_fullscreen_quad)(struct renderer *);
 	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
 	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
 	void (*scene_write)(struct scene *);
 	void (*reload_shaders)(struct renderer *);
 	void (*reload_model)(struct resources *, struct renderer *, struct model_import *);
+	void (*render_debug)(struct renderer *renderer, struct DebugLine *lines, struct DebugTri *tris,
+			     size_t num_lines, size_t num_tris);
 
 	struct input *input;
 	float clear_color[4];
@@ -292,6 +352,7 @@ struct renderer {
 	mat4s text_proj;
 	struct window *win;
 	GLuint default_shader;
+	GLuint debug_shader;
 	GLuint fullscreen_shader;
 	GLuint text_shader;
 	GLuint gui_shader;
@@ -313,37 +374,6 @@ struct renderer {
 	struct texture *current_skybox;
 
 	struct framebuffer picking_fbo;
-};
-
-struct game {
-	void *lib_handle;
-	void (*load_functions)(struct game *);
-	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *);
-	void (*init_scene)(struct scene *, struct resources *);
-	void (*entity_unset_parent)(struct entity *child);
-	void (*entity_set_parent)(struct entity *child, struct entity *parent);
-	struct entity *(*get_new_entity)(struct scene *scene);
-	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
-	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
-	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
-	vec3s (*get_up)(struct transform *t);
-	vec3s (*get_forward)(struct transform *t);
-	vec3s (*get_right)(struct transform *t);
-	void (*set_position)(struct transform *t, vec3s pos);
-	void (*set_rotation)(struct transform *t, versors rot);
-	void (*set_scale)(struct transform *t, vec3s scale);
-	void (*set_euler_angles)(struct transform *t, vec3s angles);
-};
-
-struct physics {
-	struct physics_world *physics_world;
-	float time_accum;
-	void *lib_handle;
-	struct physics *(*load_functions)(struct physics *);
-	void (*physics_init)(struct physics *physics, struct scene *scene, struct arena *arena);
-	void (*step_physics)(struct physics *physics, struct scene *scene, struct game *game, float dt);
-	struct physics_body *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
-					      bool is_static);
 };
 
 struct editor {

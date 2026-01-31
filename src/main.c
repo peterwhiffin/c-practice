@@ -94,6 +94,7 @@ void check_input(struct input *input)
 	input->actions[D].pushed = input->sdl_keys[SDL_SCANCODE_D];
 	input->actions[F].pushed = input->sdl_keys[SDL_SCANCODE_F];
 	input->actions[P].pushed = input->sdl_keys[SDL_SCANCODE_P];
+	input->actions[L].pushed = input->sdl_keys[SDL_SCANCODE_L];
 	input->actions[SPACE].pushed = input->sdl_keys[SDL_SCANCODE_SPACE];
 	input->actions[LSHIFT].pushed = input->sdl_keys[SDL_SCANCODE_LSHIFT];
 	input->actions[LCTRL].pushed = input->sdl_keys[SDL_SCANCODE_LCTRL];
@@ -182,8 +183,8 @@ int main()
 		check_input(input);
 		poll_events(win, input, ren, editor, &render_arena);
 		physics->step_physics(physics, scene, game, scene->dt);
-		game->update(scene, input, res, ren, win);
-		ren->draw_scene(ren, res, scene, win);
+		game->update(scene, input, res, ren, win, physics, game);
+		ren->draw_scene(ren, res, scene, win, physics);
 		editor->update_editor(editor);
 		SDL_GL_SwapWindow(win->sdl_win);
 	}

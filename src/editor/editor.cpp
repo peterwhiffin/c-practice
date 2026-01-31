@@ -50,6 +50,11 @@ void debug_draw(struct editor *editor)
 	if (ImGui::Button("Save Scene", ImVec2(150, 80))) {
 		editor->ren->scene_write(editor->scene);
 	}
+
+	ImGui::DragFloat("spawn velocity", &editor->game->spawn_force);
+
+	if (ImGui::Checkbox("draw physics bodies", &editor->physics->draw_debug)) {
+	}
 	ImGui::End();
 }
 

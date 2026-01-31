@@ -168,10 +168,24 @@ void update_cameras(struct scene *scene)
 	}
 }
 
-void update(struct scene *scene, struct input *input, struct resources *res, struct renderer *ren, struct window *win)
+void update(struct scene *scene, struct input *input, struct resources *res, struct renderer *ren, struct window *win,
+	    struct physics *phys, struct game *game)
 {
-	if (input->actions[SPACE].state == STARTED) {
+	if (input->actions[L].state == STARTED) {
 		ren->light_active = !ren->light_active;
+	}
+
+	if (input->actions[SPACE].state == STARTED) {
+		struct entity *e = get_new_entity(scene);
+		add_renderer(scene, e);
+		e->renderer->mesh = &res->meshes[0];
+		vec3s pos = scene->scene_cam->transform->pos;
+		vec3s dir = get_forward(scene->scene_cam->transform);
+		pos = glms_vec3_add(pos, dir);
+		vec3s force = glms_vec3_scale(dir, game->spawn_force);
+		set_position(e->transform, pos);
+		struct physics_body *body = phys->add_sphere_rigidbody(phys, scene, e, false);
+		phys->physics_add_force(phys, body, force);
 	}
 
 	if (input->actions[M1].state == STARTED) {
@@ -245,6 +259,7 @@ void init_scene(struct scene *scene, struct resources *res)
 // void (*set_euler_angles)(struct transform *t, vec3s angles);
 PETE_API void load_game_functions(struct game *game)
 {
+	game->spawn_force = 20.0f;
 	game->init_scene = init_scene;
 	game->update = update;
 	game->entity_duplicate = entity_duplicate;

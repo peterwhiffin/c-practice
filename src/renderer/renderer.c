@@ -1,3 +1,4 @@
+#include <stddef.h>
 #define UFBX_REAL_IS_FLOAT
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/vec3.h"
@@ -41,6 +42,110 @@ void draw_text(struct renderer *ren, struct resources *res, const char *text, si
 	}
 }
 
+void render_debug(struct renderer *renderer, struct camera *cam, struct DebugLine *lines, struct DebugTri *tris,
+		  size_t num_lines, size_t num_tris)
+{
+	glDisable(GL_DEPTH_TEST);
+	glUseProgram(renderer->debug_shader);
+	glUniformMatrix4fv(2, 1, GL_FALSE, &cam->viewProj.m00);
+
+	size_t num_line_verts = num_lines * 2;
+	struct DebugVertex *line_verts = malloc(sizeof(struct DebugVertex) * num_line_verts);
+
+	for (int i = 0; i < num_lines; i++) {
+		struct DebugLine *line = &lines[i];
+		struct DebugVertex *line_vert = &line_verts[i * 2];
+		struct DebugVertex *line_vert2 = &line_verts[i * 2 + 1];
+
+		line_vert->pos = line->start;
+		line_vert->color = (vec4s){
+			(float)line->color[0] / 255,
+			(float)line->color[1] / 255,
+			(float)line->color[2] / 255,
+			(float)line->color[3] / 255,
+		};
+		line_vert2->pos = line->end;
+		line_vert2->color = (vec4s){
+			(float)line->color[0] / 255,
+			(float)line->color[1] / 255,
+			(float)line->color[2] / 255,
+			(float)line->color[3] / 255,
+		};
+	}
+
+	GLuint lineVBO, lineVAO;
+	glGenVertexArrays(1, &lineVAO);
+	glGenBuffers(1, &lineVBO);
+	glBindVertexArray(lineVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+	glBufferData(GL_ARRAY_BUFFER, num_line_verts * sizeof(struct DebugVertex), line_verts, GL_DYNAMIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(struct DebugVertex), (void *)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(struct DebugVertex),
+			      (void *)offsetof(struct DebugVertex, color));
+	glEnableVertexAttribArray(1);
+
+	glDrawArrays(GL_LINES, 0, num_line_verts);
+
+	glDeleteBuffers(1, &lineVBO);
+	glDeleteVertexArrays(1, &lineVAO);
+
+	size_t num_tri_verts = num_tris * 3;
+	struct DebugVertex *tri_verts = malloc(sizeof(struct DebugVertex) * num_line_verts);
+
+	for (int i = 0; i < num_tris; i++) {
+		struct DebugTri *tri = &tris[i];
+		struct DebugVertex *tri_vert = &tri_verts[i * 3];
+		struct DebugVertex *tri_vert2 = &tri_verts[i * 3 + 1];
+		struct DebugVertex *tri_vert3 = &tri_verts[i * 3 + 2];
+
+		tri_vert->pos = tri->v0;
+		tri_vert->color = (vec4s){
+			(float)tri->color[0] / 255,
+			(float)tri->color[1] / 255,
+			(float)tri->color[2] / 255,
+			(float)tri->color[3] / 255,
+		};
+		tri_vert2->pos = tri->v1;
+		tri_vert2->color = (vec4s){
+			(float)tri->color[0] / 255,
+			(float)tri->color[1] / 255,
+			(float)tri->color[2] / 255,
+			(float)tri->color[3] / 255,
+		};
+
+		tri_vert2->pos = tri->v2;
+		tri_vert2->color = (vec4s){
+			(float)tri->color[0] / 255,
+			(float)tri->color[1] / 255,
+			(float)tri->color[2] / 255,
+			(float)tri->color[3] / 255,
+		};
+	}
+	GLuint triVBO, triVAO;
+	glGenVertexArrays(1, &triVAO);
+	glGenBuffers(1, &triVBO);
+	glBindVertexArray(triVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, triVBO);
+	glBufferData(GL_ARRAY_BUFFER, num_tri_verts * sizeof(struct DebugVertex), tri_verts, GL_DYNAMIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(struct DebugVertex), (void *)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(struct DebugVertex),
+			      (void *)offsetof(struct DebugVertex, color));
+	glEnableVertexAttribArray(1);
+
+	glDrawArrays(GL_TRIANGLES, 0, num_tri_verts);
+
+	glDeleteBuffers(1, &triVBO);
+	glDeleteVertexArrays(1, &triVAO);
+
+	glEnable(GL_DEPTH_TEST);
+	free(line_verts);
+	free(tri_verts);
+}
+
 void draw_fullscreen_quad(struct renderer *ren)
 {
 	// glViewport(0, 0, ren->win->size.x, ren->win->size.y);
@@ -62,7 +167,8 @@ void draw_fullscreen_quad(struct renderer *ren)
 	glClearNamedFramebufferfv(0, GL_DEPTH, 0, &ren->clear_depth);
 }
 
-void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win)
+void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win,
+		struct physics *phys)
 {
 	glViewport(0, 0, ren->main_fbo.width, ren->main_fbo.height);
 	// glPolygonMode(GL_FRONT_AND_BACK, scene->draw_mode);
@@ -161,10 +267,13 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	// glBindVertexArray(ren->quad_vao);
 	// glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
 
+	if (phys->draw_debug)
+		render_debug(ren, scene->scene_cam->camera, phys->lines, phys->tris, phys->num_lines, phys->num_tris);
+
 	char fps_text[256];
 
-	// float fps = 1 / scene->dt;
-	// snprintf(fps_text, 256, "%i", (int)fps);
+	float fps = 1 / scene->dt;
+	snprintf(fps_text, 256, "%i", (int)fps);
 
 	int xPos = 220;
 	int yPos = 400;
@@ -180,7 +289,7 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	//
 	// glDisable(GL_SCISSOR_TEST);
 
-	// draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
+	draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
 	draw_fullscreen_quad(ren);
 
 	// GLenum error;
