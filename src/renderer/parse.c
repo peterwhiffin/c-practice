@@ -1,8 +1,10 @@
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <wchar.h>
 #include "../types.h"
 #include "cglm/types-struct.h"
@@ -25,6 +27,11 @@
 #define TRANSFORM_ROT "rot"
 #define TRANSFORM_SCALE "scale"
 
+#define RIGIDBODY_TYPE "Rigidbody"
+#define RIGIDBODY_MOTION_TYPE "motion"
+#define RIGIDBODY_SHAPE "shape"
+#define RIGIDBODY_EXTENTS "extents"
+
 #define CAMERA_TYPE "Camera"
 #define CAMERA_FOV "fov"
 #define CAMERA_NEAR "near"
@@ -41,7 +48,7 @@
 
 enum token_type { TYPE, FIELD, SEPARATOR, OPENER, CLOSER, VALUE };
 
-enum block_type { ENTITY, TRANSFORM, CAMERA, MESH_RENDERER };
+enum block_type { ENTITY, TRANSFORM, CAMERA, MESH_RENDERER, RIGIDBODY };
 
 struct token {
 	enum token_type type;
@@ -161,7 +168,8 @@ void write_indent(FILE *f, int level)
 	}
 }
 
-void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_entity, int indent_level)
+void scene_write_entity(struct scene *scene, struct physics *phys, FILE *f, struct entity *current_entity,
+			int indent_level)
 {
 	while (current_entity) {
 		fprintf(f, "%s %s", ENTITY_TYPE, OPEN);
@@ -207,7 +215,7 @@ void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_ent
 			fprintf(f, "%s %s", MESH_RENDERER_TYPE, OPEN);
 			indent_level++;
 			write_indent(f, indent_level);
-			fprintf(f, "%s%s %s\n", MESH_RENDERER_MESH, SEP, current_entity->renderer->mesh->name);
+			fprintf(f, "%s%s%s\n", MESH_RENDERER_MESH, SEP, current_entity->renderer->mesh->name);
 			write_indent(f, indent_level);
 			fprintf(f, "%s%s", MESH_RENDERER_MATS, SEP);
 			for (int k = 0; k < current_entity->renderer->mesh->num_sub_meshes; k++) {
@@ -222,8 +230,56 @@ void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_ent
 			fprintf(f, "%s", CLOSE);
 		}
 
+		if (current_entity->body) {
+			struct BodySettings settings = phys->physics_get_body_settings(phys, current_entity->body);
+			char motion_string[128];
+			char shape_string[128];
+
+			switch (settings.motion) {
+			case STATIC:
+				snprintf(motion_string, 128, "%s", "static");
+				break;
+			case KINEMATIC:
+				snprintf(motion_string, 128, "%s", "kinematic");
+				break;
+			case DYNAMIC:
+				snprintf(motion_string, 128, "%s", "dynamic");
+				break;
+			}
+
+			switch (settings.shape) {
+			case BOX:
+				snprintf(shape_string, 128, "%s", "box");
+				break;
+			case SPHERE:
+				snprintf(shape_string, 128, "%s", "sphere");
+				break;
+			case CYLINDER:
+				snprintf(shape_string, 128, "%s", "cylinder");
+				break;
+			case CAPSULE:
+				snprintf(shape_string, 128, "%s", "capsule");
+				break;
+			}
+
+			write_indent(f, indent_level);
+			fprintf(f, "%s %s\n", RIGIDBODY_TYPE, OPEN);
+			indent_level++;
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%s\n", RIGIDBODY_MOTION_TYPE, SEP, motion_string);
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%s\n", RIGIDBODY_SHAPE, SEP, shape_string);
+			write_indent(f, indent_level);
+			fprintf(f, "%s%s%f, %f, %f\n", RIGIDBODY_EXTENTS, SEP, settings.extents.x, settings.extents.y,
+				settings.extents.z);
+
+			indent_level--;
+			write_indent(f, indent_level);
+			fprintf(f, "%s", CLOSE);
+		}
+
 		if (current_entity->children) {
-			scene_write_entity(scene, f, current_entity->children, indent_level + 1);
+			scene_write_entity(scene, phys, f, current_entity->children, indent_level + 1);
 		}
 
 		current_entity = current_entity->next;
@@ -233,14 +289,14 @@ void scene_write_entity(struct scene *scene, FILE *f, struct entity *current_ent
 	fprintf(f, "%s\n", CLOSE);
 }
 
-void scene_write(struct scene *scene)
+void scene_write(struct scene *scene, struct physics *phys)
 {
 	FILE *f = fopen("test.scene", "w");
 
 	for (int i = 0; i < scene->num_entities; i++) {
 		struct entity *e = &scene->entities[i];
 		if (!e->parent) {
-			scene_write_entity(scene, f, e, 0);
+			scene_write_entity(scene, phys, f, e, 0);
 		}
 	}
 
@@ -305,6 +361,8 @@ struct token_block *scene_parse_tokens(struct scene *scene, struct token *tokens
 				current_block->type = CAMERA;
 			} else if (!strcmp(current_token->data, MESH_RENDERER_TYPE)) {
 				current_block->type = MESH_RENDERER;
+			} else if (!strcmp(current_token->data, RIGIDBODY_TYPE)) {
+				current_block->type = RIGIDBODY;
 			}
 
 			break;
@@ -353,8 +411,8 @@ struct mesh *find_mesh(struct resources *res, const char *mesh_name)
 	return &res->meshes[0];
 }
 
-void create_scene(struct scene *scene, struct game *game, struct resources *res, struct token_block *blocks,
-		  struct entity *current_entity)
+void create_scene(struct scene *scene, struct physics *phys, struct game *game, struct resources *res,
+		  struct token_block *blocks, struct entity *current_entity)
 {
 	struct entity *parent_entity = current_entity;
 
@@ -437,10 +495,54 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 				current_pair = current_pair->next;
 			}
 			break;
+
+		case RIGIDBODY: {
+			printf("found rigidbody component\n");
+			struct BodySettings settings;
+
+			while (current_pair) {
+				if (!strcmp(current_pair->field->data, RIGIDBODY_MOTION_TYPE)) {
+					if (!strcmp(current_pair->value->data, "static")) {
+						settings.motion = STATIC;
+					} else if (!strcmp(current_pair->value->data, "kinematic")) {
+						settings.motion = KINEMATIC;
+					} else if (!strcmp(current_pair->value->data, "dynamic")) {
+						settings.motion = DYNAMIC;
+					}
+				} else if (!strcmp(current_pair->field->data, RIGIDBODY_SHAPE)) {
+					if (!strcmp(current_pair->value->data, "box")) {
+						settings.shape = BOX;
+					} else if (!strcmp(current_pair->value->data, "sphere")) {
+						settings.shape = SPHERE;
+					} else if (!strcmp(current_pair->value->data, "cylinder")) {
+						settings.shape = CYLINDER;
+					} else if (!strcmp(current_pair->value->data, "capsule")) {
+						settings.shape = CAPSULE;
+					}
+				} else if (!strcmp(current_pair->field->data, RIGIDBODY_EXTENTS)) {
+					char *token = strtok(current_pair->value->data, ",");
+					u32 index = 0;
+					vec3s extents = (vec3s){ 0.5f, 0.5f, 0.5f };
+					while (token) {
+						extents.raw[index] = strtof(token, NULL);
+						index++;
+						token = strtok(NULL, ",");
+					}
+					settings.extents = extents;
+				}
+
+				current_pair = current_pair->next;
+			}
+
+			phys->add_rigidbody(phys, scene, current_entity, &settings);
+			// phys->add_rigidbody_settings(phys, scene, current_entity);
+
+			break;
+		}
 		}
 
 		if (blocks->children) {
-			create_scene(scene, game, res, blocks->children, current_entity);
+			create_scene(scene, phys, game, res, blocks->children, current_entity);
 		}
 
 		blocks = blocks->next;
@@ -448,13 +550,24 @@ void create_scene(struct scene *scene, struct game *game, struct resources *res,
 	}
 }
 
-void scene_load(struct scene *scene, struct game *game, struct resources *res, char *filename)
+void init_entities(struct scene *scene, struct physics *phys)
+{
+	for (int i = 0; i < scene->num_entities; i++) {
+		struct entity *e = &scene->entities[i];
+		if (e->body) {
+			phys->rigidbody_init(phys, e);
+		}
+	}
+}
+
+void scene_load(struct scene *scene, struct physics *phys, struct game *game, struct resources *res, char *filename)
 {
 	struct arena temp_arena = get_new_arena((size_t)1 << 30);
 	size_t num_tokens;
 	struct token *tokens = scene_get_tokens(filename, &num_tokens, &temp_arena);
 	struct token_block *blocks = scene_parse_tokens(scene, tokens, num_tokens, &temp_arena);
-	create_scene(scene, game, res, blocks, NULL);
+	create_scene(scene, phys, game, res, blocks, NULL);
+	init_entities(scene, phys);
 	arena_free(&temp_arena);
 }
 

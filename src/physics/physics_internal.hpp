@@ -46,6 +46,7 @@ constexpr double cDeltaTime = 1.0 / 60.0;
 
 struct physics_body {
 	struct entity *entity;
+	struct BodySettings settings;
 	class JPH::BodyID jolt_body;
 };
 

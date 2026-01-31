@@ -1,4 +1,5 @@
 // #define CGLM_USE_ANONYMOUS_STRUCT 1
+#include "physics.h"
 #include "../types.h"
 
 #include "cglm/types-struct.h"
@@ -6,6 +7,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <set>
 #include <thread>
 
 #include "../arena.c"
@@ -214,7 +216,60 @@ struct physics_body *add_sphere_rigidbody(struct physics *physics, struct scene 
 	return r;
 }
 
-struct physics_body *add_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity, bool is_static)
+vec3s get_transformed_scale(struct physics *phys, struct physics_body *body)
+{
+	TransformedShape tshape = phys->physics_world->bodyInterface->GetTransformedShape(body->jolt_body);
+	Vec3 scale = tshape.GetShapeScale();
+	AABox aab = tshape.GetWorldSpaceBounds();
+	Vec3 extent = aab.GetExtent();
+	return (vec3s){ extent.GetX(), extent.GetY(), extent.GetZ() };
+}
+
+struct BodySettings physics_get_body_settings(struct physics *phys, struct physics_body *body)
+{
+	struct BodySettings settings;
+	struct transform *t = body->entity->transform;
+	JPH::EMotionType motion = phys->physics_world->bodyInterface->GetMotionType(body->jolt_body);
+	JPH::EShapeSubType shape = phys->physics_world->bodyInterface->GetShape(body->jolt_body)->GetSubType();
+	TransformedShape tshape = phys->physics_world->bodyInterface->GetTransformedShape(body->jolt_body);
+	AABox aab = tshape.GetWorldSpaceBounds();
+	Vec3 extent = aab.GetExtent();
+
+	settings.extents =
+		(vec3s){ extent.GetX() / t->scale.x, extent.GetY() / t->scale.y, extent.GetZ() / t->scale.z };
+
+	switch (motion) {
+	case JPH::EMotionType::Static:
+		settings.motion = STATIC;
+		break;
+	case JPH::EMotionType::Kinematic:
+		settings.motion = KINEMATIC;
+		break;
+	case JPH::EMotionType::Dynamic:
+		settings.motion = DYNAMIC;
+		break;
+	}
+
+	switch (shape) {
+	case JPH::EShapeSubType::Box:
+		settings.shape = BOX;
+		break;
+	case JPH::EShapeSubType::Sphere:
+		settings.shape = SPHERE;
+		break;
+	case JPH::EShapeSubType::Cylinder:
+		settings.shape = CYLINDER;
+		break;
+	case JPH::EShapeSubType::Capsule:
+		settings.shape = CAPSULE;
+		break;
+	}
+
+	return settings;
+}
+
+struct physics_body *add_rigidbody_box(struct physics *physics, struct scene *scene, struct entity *entity,
+				       bool is_static)
 {
 	struct physics_body *r = &scene->bodies[scene->num_bodies];
 	entity->body = r;
@@ -245,6 +300,84 @@ struct physics_body *add_rigidbody(struct physics *physics, struct scene *scene,
 	Vec3 inPos = Vec3(entity->transform->pos.x, entity->transform->pos.y, entity->transform->pos.z);
 	body_interface->SetPosition(entity->body->jolt_body, inPos, JPH::EActivation::Activate);
 	return r;
+}
+
+struct physics_body *add_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
+				   struct BodySettings *settings)
+{
+	struct physics_body *r = &scene->bodies[scene->num_bodies];
+	r->settings = *settings;
+	entity->body = r;
+	r->entity = entity;
+	scene->num_bodies++;
+	return r;
+}
+
+void rigidbody_init(struct physics *physics, struct entity *entity)
+
+{
+	struct BodySettings *settings = &entity->body->settings;
+	JPH::Vec3 extent = JPH::Vec3(0.5f, 0.5f, 0.5f);
+
+	extent.SetX(settings->extents.x * entity->transform->scale.x);
+	extent.SetY(settings->extents.y * entity->transform->scale.y);
+	extent.SetZ(settings->extents.z * entity->transform->scale.z);
+
+	JPH::BodyInterface *body_interface = physics->physics_world->bodyInterface;
+	JPH::ShapeSettings::ShapeResult shape_result;
+	// JPH::ShapeRefC shape = shape_result.Get();
+	JPH::EMotionType motion_type;
+	ObjectLayer layer;
+
+	switch (settings->shape) {
+	case BOX: {
+		JPH::BoxShapeSettings box_settings = JPH::BoxShapeSettings(extent);
+		shape_result = box_settings.Create();
+		break;
+	}
+	case SPHERE: {
+		JPH::SphereShapeSettings sphere_settings = JPH::SphereShapeSettings(extent.GetX());
+		shape_result = sphere_settings.Create();
+		break;
+	}
+	case CYLINDER: {
+		JPH::CylinderShapeSettings cylinder_settings = JPH::CylinderShapeSettings(extent.GetX(), extent.GetY());
+		shape_result = cylinder_settings.Create();
+		break;
+	}
+	case CAPSULE: {
+		JPH::CapsuleShapeSettings capsule_settings = JPH::CapsuleShapeSettings(extent.GetX(), extent.GetY());
+		shape_result = capsule_settings.Create();
+		break;
+	}
+	}
+
+	switch (settings->motion) {
+	case STATIC:
+		motion_type = JPH::EMotionType::Static;
+		layer = Layers::NON_MOVING;
+		break;
+	case KINEMATIC:
+		motion_type = JPH::EMotionType::Kinematic;
+		layer = Layers::MOVING;
+		break;
+	case DYNAMIC:
+		motion_type = JPH::EMotionType::Dynamic;
+		layer = Layers::MOVING;
+		break;
+	}
+
+	JPH::ShapeRefC shape = shape_result.Get();
+	JPH::BodyCreationSettings body_settings(shape, JPH::RVec3(0.0_r, 0.0_r, 0.0_r), JPH::Quat::sIdentity(),
+						motion_type, layer);
+	body_settings.mAllowDynamicOrKinematic = settings->motion == STATIC ? false : true;
+	JPH::Body *body = body_interface->CreateBody(body_settings);
+	body_interface->AddBody(body->GetID(), JPH::EActivation::Activate);
+	entity->body->jolt_body = body->GetID();
+	Vec3 inPos = Vec3(entity->transform->pos.x, entity->transform->pos.y, entity->transform->pos.z);
+	Quat inRot = Quat(entity->transform->rot.x, entity->transform->rot.y, entity->transform->rot.z,
+			  entity->transform->rot.w);
+	body_interface->SetPositionAndRotation(entity->body->jolt_body, inPos, inRot, JPH::EActivation::Activate);
 }
 
 void physics_init(struct physics *physics, struct scene *scene, struct arena *arena)
@@ -287,6 +420,10 @@ extern "C" PETE_API void load_physics_functions(struct physics *physics)
 	physics->step_physics = step_physics;
 	physics->physics_init = physics_init;
 	physics->add_rigidbody = add_rigidbody;
+	physics->add_rigidbody_box = add_rigidbody_box;
 	physics->add_sphere_rigidbody = add_sphere_rigidbody;
 	physics->physics_add_force = physics_add_force;
+	physics->get_transformed_scale = get_transformed_scale;
+	physics->physics_get_body_settings = physics_get_body_settings;
+	physics->rigidbody_init = rigidbody_init;
 }

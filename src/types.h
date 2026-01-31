@@ -319,13 +319,19 @@ struct physics {
 	struct physics *(*load_functions)(struct physics *);
 	void (*physics_init)(struct physics *physics, struct scene *scene, struct arena *arena);
 	void (*step_physics)(struct physics *physics, struct scene *scene, struct game *game, float dt);
+	vec3s (*get_transformed_scale)(struct physics *phys, struct physics_body *body);
+
 	struct physics_body *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
-					      bool is_static);
+					      struct BodySettings *settings);
+	struct physics_body *(*add_rigidbody_box)(struct physics *physics, struct scene *scene, struct entity *entity,
+						  bool is_static);
 
 	struct physics_body *(*add_sphere_rigidbody)(struct physics *physics, struct scene *scene,
 						     struct entity *entity, bool is_static);
 
+	void (*rigidbody_init)(struct physics *physics, struct entity *entity);
 	void (*physics_add_force)(struct physics *physics, struct physics_body *body, vec3s force);
+	struct BodySettings (*physics_get_body_settings)(struct physics *phys, struct physics_body *body);
 };
 
 struct renderer {
@@ -339,7 +345,7 @@ struct renderer {
 	void (*draw_fullscreen_quad)(struct renderer *);
 	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
 	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
-	void (*scene_write)(struct scene *);
+	void (*scene_write)(struct scene *scene, struct physics *phys);
 	void (*reload_shaders)(struct renderer *);
 	void (*reload_model)(struct resources *, struct renderer *, struct model_import *);
 	void (*render_debug)(struct renderer *renderer, struct DebugLine *lines, struct DebugTri *tris,

@@ -1,3 +1,4 @@
+#include "cglm/types-struct.h"
 #define NO_GLAD
 #include "./imgui.cpp"
 #include "./imgui_demo.cpp"
@@ -48,7 +49,7 @@ void debug_draw(struct editor *editor)
 	ImGui::DragFloat2("image size", &editor->image_size.x);
 	ImGui::DragFloat2("image pos", &editor->image_pos.x);
 	if (ImGui::Button("Save Scene", ImVec2(150, 80))) {
-		editor->ren->scene_write(editor->scene);
+		editor->ren->scene_write(editor->scene, editor->physics);
 	}
 
 	ImGui::DragFloat("spawn velocity", &editor->game->spawn_force);
@@ -64,11 +65,11 @@ void inspector_draw_add_component(struct editor *editor, struct entity *e)
 		const bool is_selected = false;
 		if (!e->body) {
 			if (ImGui::Selectable("Rigidbody - static", is_selected)) {
-				e->body = editor->physics->add_rigidbody(editor->physics, editor->scene, e, true);
+				e->body = editor->physics->add_rigidbody_box(editor->physics, editor->scene, e, true);
 			}
 
 			if (ImGui::Selectable("Rigidbody - dynamic", is_selected)) {
-				e->body = editor->physics->add_rigidbody(editor->physics, editor->scene, e, false);
+				e->body = editor->physics->add_rigidbody_box(editor->physics, editor->scene, e, false);
 			}
 		}
 		ImGui::EndCombo();
@@ -126,6 +127,8 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 
 	if (e->body) {
 		if (ImGui::CollapsingHeader("Rigidbody", ImGuiTreeNodeFlags_DefaultOpen)) {
+			vec3s scale = editor->physics->get_transformed_scale(editor->physics, e->body);
+			ImGui::DragFloat3("transformed scale", &scale.x);
 		}
 	}
 

@@ -174,7 +174,7 @@ int main()
 	physics->physics_init(physics, scene, &main_arena);
 	editor->init_editor(win, editor);
 
-	scene_load(scene, game, res, "test.scene");
+	scene_load(scene, physics, game, res, "test.scene");
 	update_time(scene);
 
 	while (!win->should_close) {
