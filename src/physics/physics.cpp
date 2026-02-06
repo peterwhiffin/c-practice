@@ -5,6 +5,7 @@
 #include "cglm/types-struct.h"
 #include "physics_internal.hpp"
 #include <cstdarg>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <set>
@@ -33,16 +34,15 @@ void step_physics(struct physics *physics, struct scene *scene, struct game *gam
 							      physics->physics_world->tempAllocator,
 							      physics->physics_world->jobSystem);
 
-		for (int i = 0; i < scene->num_bodies; i++) {
+		for (int i = 0; i < scene->rigidbodies.count; i++) {
 			BodyInterface *bi = physics->physics_world->bodyInterface;
-			struct physics_body *body = &scene->bodies[i];
+			struct rigidbody *body = &scene->rigidbodies.data[i];
 			Vec3 new_pos = bi->GetPosition(body->jolt_body);
 			Quat new_rot = bi->GetRotation(body->jolt_body);
-			game->set_position(body->entity->transform,
-					   (vec3s){ new_pos.GetX(), new_pos.GetY(), new_pos.GetZ() });
+			game->set_position(body->entity->transform, { new_pos.GetX(), new_pos.GetY(), new_pos.GetZ() });
 
 			game->set_rotation(body->entity->transform,
-					   (versors){ new_rot.GetX(), new_rot.GetY(), new_rot.GetZ(), new_rot.GetW() });
+					   { new_rot.GetX(), new_rot.GetY(), new_rot.GetZ(), new_rot.GetW() });
 		}
 	}
 
@@ -143,8 +143,8 @@ static bool AssertFailedImpl(const char *inExpression, const char *inMessage, co
 void MyDebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor)
 {
 	DebugLine line;
-	line.start = (vec3s){ inFrom.GetX(), inFrom.GetY(), inFrom.GetZ() };
-	line.end = (vec3s){ inTo.GetX(), inTo.GetY(), inTo.GetZ() };
+	line.start = { inFrom.GetX(), inFrom.GetY(), inFrom.GetZ() };
+	line.end = { inTo.GetX(), inTo.GetY(), inTo.GetZ() };
 	line.color[0] = inColor.r;
 	line.color[1] = inColor.g;
 	line.color[2] = inColor.b;
@@ -157,9 +157,9 @@ void MyDebugRenderer::DrawTriangle(JPH::RVec3Arg inV1, const JPH::RVec3Arg inV2,
 				   JPH::ColorArg inColor, ECastShadow inCastShadow)
 {
 	DebugTri tri;
-	tri.v0 = (vec3s){ inV1.GetX(), inV1.GetY(), inV1.GetZ() };
-	tri.v1 = (vec3s){ inV2.GetX(), inV2.GetY(), inV2.GetZ() };
-	tri.v2 = (vec3s){ inV3.GetX(), inV3.GetY(), inV3.GetZ() };
+	tri.v0 = { inV1.GetX(), inV1.GetY(), inV1.GetZ() };
+	tri.v1 = { inV2.GetX(), inV2.GetY(), inV2.GetZ() };
+	tri.v2 = { inV3.GetX(), inV3.GetY(), inV3.GetZ() };
 	tri.color[0] = inColor.r;
 	tri.color[1] = inColor.g;
 	tri.color[2] = inColor.b;
@@ -173,7 +173,7 @@ void MyDebugRenderer::DrawText3D(JPH::RVec3Arg inPosition, const std::string_vie
 	// Implement
 }
 
-void physics_add_force(struct physics *physics, struct physics_body *body, vec3s force)
+void physics_add_force(struct physics *physics, struct rigidbody *body, vec3s force)
 {
 	// physics->physics_world->bodyInterface->AddForce(body->jolt_body, Vec3(force.x, force.y, force.z),
 	// 						JPH::EActivation::Activate);
@@ -181,13 +181,13 @@ void physics_add_force(struct physics *physics, struct physics_body *body, vec3s
 	physics->physics_world->bodyInterface->SetLinearVelocity(body->jolt_body, Vec3(force.x, force.y, force.z));
 }
 
-struct physics_body *add_sphere_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
-					  bool is_static)
+struct rigidbody *add_sphere_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
+				       bool is_static)
 {
-	struct physics_body *r = &scene->bodies[scene->num_bodies];
+	struct rigidbody *r = &scene->rigidbodies.data[scene->rigidbodies.count];
 	entity->body = r;
 	r->entity = entity;
-	scene->num_bodies++;
+	scene->rigidbodies.count++;
 
 	JPH::Vec3 extent = JPH::Vec3(0.5f, 0.5f, 0.5f);
 
@@ -216,16 +216,16 @@ struct physics_body *add_sphere_rigidbody(struct physics *physics, struct scene 
 	return r;
 }
 
-vec3s get_transformed_scale(struct physics *phys, struct physics_body *body)
+vec3s get_transformed_scale(struct physics *phys, struct rigidbody *body)
 {
 	TransformedShape tshape = phys->physics_world->bodyInterface->GetTransformedShape(body->jolt_body);
 	Vec3 scale = tshape.GetShapeScale();
 	AABox aab = tshape.GetWorldSpaceBounds();
 	Vec3 extent = aab.GetExtent();
-	return (vec3s){ extent.GetX(), extent.GetY(), extent.GetZ() };
+	return { extent.GetX(), extent.GetY(), extent.GetZ() };
 }
 
-struct BodySettings physics_get_body_settings(struct physics *phys, struct physics_body *body)
+struct BodySettings physics_get_body_settings(struct physics *phys, struct rigidbody *body)
 {
 	struct BodySettings settings;
 	struct transform *t = body->entity->transform;
@@ -233,10 +233,14 @@ struct BodySettings physics_get_body_settings(struct physics *phys, struct physi
 	JPH::EShapeSubType shape = phys->physics_world->bodyInterface->GetShape(body->jolt_body)->GetSubType();
 	TransformedShape tshape = phys->physics_world->bodyInterface->GetTransformedShape(body->jolt_body);
 	AABox aab = tshape.GetWorldSpaceBounds();
-	Vec3 extent = aab.GetExtent();
 
-	settings.extents =
-		(vec3s){ extent.GetX() / t->scale.x, extent.GetY() / t->scale.y, extent.GetZ() / t->scale.z };
+	auto s = phys->physics_world->bodyInterface->GetShape(body->jolt_body);
+	AABox aab2 = s->GetLocalBounds();
+
+	// Vec3 extent = aab.GetExtent();
+	Vec3 extent = aab2.GetExtent();
+
+	settings.extents = { extent.GetX() / t->scale.x, extent.GetY() / t->scale.y, extent.GetZ() / t->scale.z };
 
 	switch (motion) {
 	case JPH::EMotionType::Static:
@@ -268,13 +272,12 @@ struct BodySettings physics_get_body_settings(struct physics *phys, struct physi
 	return settings;
 }
 
-struct physics_body *add_rigidbody_box(struct physics *physics, struct scene *scene, struct entity *entity,
-				       bool is_static)
+struct rigidbody *add_rigidbody_box(struct physics *physics, struct scene *scene, struct entity *entity, bool is_static)
 {
-	struct physics_body *r = &scene->bodies[scene->num_bodies];
+	struct rigidbody *r = &scene->rigidbodies.data[scene->rigidbodies.count];
 	entity->body = r;
 	r->entity = entity;
-	scene->num_bodies++;
+	scene->rigidbodies.count++;
 
 	JPH::Vec3 extent = JPH::Vec3(0.5f, 0.5f, 0.5f);
 
@@ -298,19 +301,32 @@ struct physics_body *add_rigidbody_box(struct physics *physics, struct scene *sc
 	body_interface->AddBody(body->GetID(), JPH::EActivation::Activate);
 	entity->body->jolt_body = body->GetID();
 	Vec3 inPos = Vec3(entity->transform->pos.x, entity->transform->pos.y, entity->transform->pos.z);
-	body_interface->SetPosition(entity->body->jolt_body, inPos, JPH::EActivation::Activate);
+	Quat inRot = Quat(entity->transform->rot.x, entity->transform->rot.y, entity->transform->rot.z,
+			  entity->transform->rot.w);
+	body_interface->SetPositionAndRotation(entity->body->jolt_body, inPos, inRot, JPH::EActivation::Activate);
+	// body_interface->SetPosition(entity->body->jolt_body, inPos, JPH::EActivation::Activate);
 	return r;
 }
 
-struct physics_body *add_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
-				   struct BodySettings *settings)
+struct rigidbody *add_rigidbody(struct physics *physics, struct scene *scene, struct entity *entity,
+				struct BodySettings *settings)
 {
-	struct physics_body *r = &scene->bodies[scene->num_bodies];
+	struct rigidbody *r = &scene->rigidbodies.data[scene->rigidbodies.count];
 	r->settings = *settings;
 	entity->body = r;
 	r->entity = entity;
-	scene->num_bodies++;
+	scene->rigidbodies.count++;
 	return r;
+}
+
+struct entity *rigidbody_get_entity(struct rigidbody *body)
+{
+	return body->entity;
+}
+
+struct rigidbody *rigidbody_get_body(struct scene *scene, size_t index)
+{
+	return &scene->rigidbodies.data[index];
 }
 
 void rigidbody_init(struct physics *physics, struct entity *entity)
@@ -368,22 +384,28 @@ void rigidbody_init(struct physics *physics, struct entity *entity)
 	}
 
 	JPH::ShapeRefC shape = shape_result.Get();
+
 	JPH::BodyCreationSettings body_settings(shape, JPH::RVec3(0.0_r, 0.0_r, 0.0_r), JPH::Quat::sIdentity(),
 						motion_type, layer);
+
+	// JPH::BodyCreationSettings body_settings(shape, inPos, inRot, motion_type, layer);
 	body_settings.mAllowDynamicOrKinematic = settings->motion == STATIC ? false : true;
 	JPH::Body *body = body_interface->CreateBody(body_settings);
 	body_interface->AddBody(body->GetID(), JPH::EActivation::Activate);
-	entity->body->jolt_body = body->GetID();
+
 	Vec3 inPos = Vec3(entity->transform->pos.x, entity->transform->pos.y, entity->transform->pos.z);
 	Quat inRot = Quat(entity->transform->rot.x, entity->transform->rot.y, entity->transform->rot.z,
 			  entity->transform->rot.w);
-	body_interface->SetPositionAndRotation(entity->body->jolt_body, inPos, inRot, JPH::EActivation::Activate);
+	entity->body->jolt_body = body->GetID();
+	body_interface->SetPosition(entity->body->jolt_body, inPos, JPH::EActivation::Activate);
+	body_interface->SetRotation(entity->body->jolt_body, inRot, JPH::EActivation::Activate);
+	// body_interface->SetPositionAndRotation(entity->body->jolt_body, inPos, inRot, JPH::EActivation::Activate);
 }
 
 void physics_init(struct physics *physics, struct scene *scene, struct arena *arena)
 {
 	physics->physics_world = alloc_struct(arena, struct physics_world, 1);
-	scene->bodies = alloc_struct(arena, struct physics_body, 4096);
+	scene->rigidbodies.data = alloc_struct(arena, struct rigidbody, 4096);
 	RegisterDefaultAllocator();
 	Trace = TraceImpl;
 	JPH_IF_ENABLE_ASSERTS(AssertFailed = AssertFailedImpl;)
@@ -415,6 +437,22 @@ void physics_init(struct physics *physics, struct scene *scene, struct arena *ar
 	DebugRenderer::sInstance = physics_world->debug_renderer;
 }
 
+void physics_remove_rigidbody(struct scene *scene, struct entity *entity)
+{
+	struct rigidbody *last_body = &scene->rigidbodies.data[scene->rigidbodies.count - 1];
+
+	scene->physics->physics_world->bodyInterface->RemoveBody(entity->body->jolt_body);
+	scene->physics->physics_world->bodyInterface->DestroyBody(entity->body->jolt_body);
+
+	if (last_body != entity->body) {
+		struct entity *swap_entity = last_body->entity;
+		struct rigidbody temp_body = *swap_entity->body;
+		swap_entity->body = entity->body;
+		*swap_entity->body = temp_body;
+	}
+	scene->rigidbodies.count--;
+}
+
 extern "C" PETE_API void load_physics_functions(struct physics *physics)
 {
 	physics->step_physics = step_physics;
@@ -426,4 +464,7 @@ extern "C" PETE_API void load_physics_functions(struct physics *physics)
 	physics->get_transformed_scale = get_transformed_scale;
 	physics->physics_get_body_settings = physics_get_body_settings;
 	physics->rigidbody_init = rigidbody_init;
+	physics->rigidbody_get_entity = rigidbody_get_entity;
+	physics->rigidbody_get_body = rigidbody_get_body;
+	physics->physics_remove_rigidbody = physics_remove_rigidbody;
 }

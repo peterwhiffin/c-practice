@@ -1,3 +1,4 @@
+#include "cglm/types.h"
 #include <stddef.h>
 #define UFBX_REAL_IS_FLOAT
 #include "cglm/struct/mat4.h"
@@ -168,12 +169,12 @@ void draw_fullscreen_quad(struct renderer *ren)
 }
 
 void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win,
-		struct physics *phys)
+		struct physics *phys, struct camera *cam)
 {
 	glViewport(0, 0, ren->main_fbo.width, ren->main_fbo.height);
 	// glPolygonMode(GL_FRONT_AND_BACK, scene->draw_mode);
-	vec3s lightDir = { 0.4f, -0.6f, 0.1f };
-	lightDir = glms_vec3_normalize(lightDir);
+	// vec3s lightDir = { 0.4f, -0.6f, 0.1f };
+	// lightDir = glms_vec3_normalize(lightDir);
 
 	vec4s white = (vec4s){ 1.0f, 1.0f, 1.0f, 1.0f };
 	vec4s orange = (vec4s){ 1.0f, 0.60f, 0.0f, 1.0f };
@@ -195,10 +196,10 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	glDisable(GL_CULL_FACE);
 	glDepthFunc(GL_LEQUAL);
 	glUseProgram(ren->skybox_shader);
-	mat4s sky_view = glms_mat4_ins3(glms_mat4_pick3(scene->scene_cam->camera->view), GLMS_MAT4_IDENTITY);
+	mat4s sky_view = glms_mat4_ins3(glms_mat4_pick3(cam->view), GLMS_MAT4_IDENTITY);
 	vec3s sky_colors = { 1.0f, 1.0f, 1.0f };
 	glUniformMatrix4fv(5, 1, GL_FALSE, &sky_view.m00);
-	glUniformMatrix4fv(6, 1, GL_FALSE, &scene->scene_cam->camera->proj.m00);
+	glUniformMatrix4fv(6, 1, GL_FALSE, &cam->proj.m00);
 	glUniform3fv(10, 1, &sky_colors.x);
 	glBindTextureUnit(0, ren->current_skybox->id);
 	glBindVertexArray(ren->skybox_vao);
@@ -210,14 +211,17 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 
-	for (int i = 0; i < scene->num_renderers; i++) {
-		struct mesh_renderer *mr = &scene->renderers[i];
+	for (int i = 0; i < scene->mesh_renderers.count; i++) {
+		struct mesh_renderer *mr = &scene->mesh_renderers.data[i];
 
-		vec3s scale = mr->entity->transform->scale;
-		vec3s up_scale = glms_vec3_scale(scale, 1.01f);
+		// vec3s scale = mr->entity->transform->scale;
+		// vec3s up_scale = glms_vec3_scale(scale, 1.01f);
 		glUseProgram(ren->default_shader);
-		glUniform3fv(11, 1, &lightDir.x);
-		glUniformMatrix4fv(9, 1, GL_FALSE, &scene->scene_cam->camera->viewProj.m00);
+
+		vec3s light_dir = scene->light_direction;
+		// light_dir = glms_normalize(scene->light_direction);
+		glUniform3fv(11, 1, &light_dir.x);
+		glUniformMatrix4fv(9, 1, GL_FALSE, &cam->viewProj.m00);
 		glUniformMatrix4fv(13, 1, GL_FALSE, &mr->entity->transform->world_transform.m00);
 		glUniform1f(12, ren->light_active);
 		glUniform1f(23, scene->time);
@@ -235,28 +239,28 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 			glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
 		}
 
-		mat4s scaled_up = glms_mat4_scale(mr->entity->transform->world_transform, 1.01f);
-		glUniformMatrix4fv(13, 1, GL_FALSE, &scaled_up.m00);
-		glUniform4fv(10, 1, &orange.x);
-
-		glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-		glStencilMask(0x00);
-		glDisable(GL_DEPTH_TEST);
-
-		glUniform1f(12, 0.0f);
-		glUniform1f(24, 0.008f);
-		for (int i = 0; i < mr->mesh->num_sub_meshes; i++) {
-			struct sub_mesh *sm = &mr->mesh->sub_meshes[i];
-
-			glBindTextureUnit(0, res->white_tex.id);
-			glBindVertexArray(sm->vao);
-			glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
-		}
-
-		glUniform1f(24, 0.0f);
-		glStencilMask(0xFF);
-		glStencilFunc(GL_ALWAYS, 1, 0xFF);
-		glEnable(GL_DEPTH_TEST);
+		// mat4s scaled_up = glms_mat4_scale(mr->entity->transform->world_transform, 1.01f);
+		// glUniformMatrix4fv(13, 1, GL_FALSE, &scaled_up.m00);
+		// glUniform4fv(10, 1, &orange.x);
+		//
+		// glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+		// glStencilMask(0x00);
+		// glDisable(GL_DEPTH_TEST);
+		//
+		// glUniform1f(12, 0.0f);
+		// glUniform1f(24, 0.008f);
+		// for (int i = 0; i < mr->mesh->num_sub_meshes; i++) {
+		// 	struct sub_mesh *sm = &mr->mesh->sub_meshes[i];
+		//
+		// 	glBindTextureUnit(0, res->white_tex.id);
+		// 	glBindVertexArray(sm->vao);
+		// 	glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
+		// }
+		//
+		// glUniform1f(24, 0.0f);
+		// glStencilMask(0xFF);
+		// glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		// glEnable(GL_DEPTH_TEST);
 	}
 
 	// glUseProgram(ren->gui_shader);
@@ -268,7 +272,7 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	// glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
 
 	if (phys->draw_debug)
-		render_debug(ren, scene->scene_cam->camera, phys->lines, phys->tris, phys->num_lines, phys->num_tris);
+		render_debug(ren, cam, phys->lines, phys->tris, phys->num_lines, phys->num_tris);
 
 	char fps_text[256];
 
@@ -348,7 +352,7 @@ void init_renderer(struct renderer *ren, struct arena *arena, struct window *win
 	ren->clear_color[2] = 0.0f;
 	ren->clear_color[3] = 1.0f;
 	ren->clear_depth = 1.0f;
-	ren->light_active = 0.0f;
+	ren->light_active = 1.0f;
 	ren->main_fbo.width = 800;
 	ren->main_fbo.height = 600;
 	ren->main_fbo.rb.attachment = GL_DEPTH_STENCIL_ATTACHMENT;

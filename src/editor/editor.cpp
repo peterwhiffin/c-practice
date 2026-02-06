@@ -1,4 +1,5 @@
 #include "cglm/types-struct.h"
+#include <cstdio>
 #define NO_GLAD
 #include "./imgui.cpp"
 #include "./imgui_demo.cpp"
@@ -14,10 +15,27 @@
 
 #include "../types.h"
 #include "SDL3/SDL_events.h"
+#include "../arena.c"
+
+struct arena editor_arena;
 
 void scene_view_draw(struct editor *editor)
 {
 	ImGui::Begin("scene");
+
+	if (editor->mode == DEFAULT) {
+		if (ImGui::Button("Play", ImVec2(40, 25))) {
+			editor->mode = PLAY;
+			editor->reload_scene = true;
+			// editor->game->start_game(editor->game, editor->scene);
+		}
+	} else if (editor->mode == PLAY) {
+		if (ImGui::Button("Stop", ImVec2(40, 25))) {
+			editor->mode = DEFAULT;
+			editor->reload_scene = true;
+		}
+	}
+
 	ImVec2 available_space = ImGui::GetContentRegionAvail();
 	float aspect = (float)editor->ren->final_fbo.width / editor->ren->final_fbo.height;
 	ImVec2 image_size = ImVec2(editor->ren->final_fbo.width, editor->ren->final_fbo.height);
@@ -48,6 +66,7 @@ void debug_draw(struct editor *editor)
 	ImGui::Begin("Debug");
 	ImGui::DragFloat2("image size", &editor->image_size.x);
 	ImGui::DragFloat2("image pos", &editor->image_pos.x);
+	ImGui::DragFloat3("light direction", &editor->scene->light_direction.x);
 	if (ImGui::Button("Save Scene", ImVec2(150, 80))) {
 		editor->ren->scene_write(editor->scene, editor->physics);
 	}
@@ -78,20 +97,33 @@ void inspector_draw_add_component(struct editor *editor, struct entity *e)
 
 void inspector_draw_entity(struct editor *editor, struct entity *e)
 {
-	ImGui::Text("%s", e->name);
+	char name[128];
+	snprintf(name, 128, "%s", e->name);
+	ImGuiInputTextFlags flags = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
 
-	vec3s euler_angles = e->transform->euler_angles;
-
-	if (ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f)) {
-		editor->game->set_position(e->transform, e->transform->pos);
+	if (ImGui::InputTextWithHint("Name", name, name, 128, flags)) {
+		if (name[0] != '\0') {
+			snprintf(e->name, 128, "%s", name);
+		}
 	}
 
-	if (ImGui::DragFloat3("rot", &euler_angles.x, 0.01f)) {
-		editor->game->set_euler_angles(e->transform, euler_angles);
-	}
+	ImGui::SameLine();
+	ImGui::Text("%lu", e->id);
 
-	if (ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f)) {
-		editor->game->set_scale(e->transform, e->transform->scale);
+	if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+		vec3s euler_angles = e->transform->euler_angles;
+
+		if (ImGui::DragFloat3("pos", &e->transform->pos.x, 0.01f)) {
+			editor->game->set_position(e->transform, e->transform->pos);
+		}
+
+		if (ImGui::DragFloat3("rot", &euler_angles.x, 0.01f)) {
+			editor->game->set_euler_angles(e->transform, euler_angles);
+		}
+
+		if (ImGui::DragFloat3("scale", &e->transform->scale.x, 0.01f)) {
+			editor->game->set_scale(e->transform, e->transform->scale);
+		}
 	}
 
 	if (e->camera) {
@@ -110,7 +142,9 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 
 			if (ImGui::BeginCombo("mesh", e->renderer->mesh->name)) {
 				for (int i = 0; i < editor->res->num_meshes; i++) {
-					if (ImGui::Selectable(editor->res->meshes[i].name)) {
+					char label[256];
+					snprintf(label, 256, "%s%i", editor->res->meshes[i].name, i);
+					if (ImGui::Selectable(label)) {
 						e->renderer->mesh = &editor->res->meshes[i];
 					}
 				}
@@ -120,7 +154,9 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 		}
 
 		if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::ColorPicker4("base color", &e->renderer->mesh->sub_meshes[0].mat->color.r);
+			ImGui::ColorEdit4("base color##3", &e->renderer->mesh->sub_meshes[0].mat->color.r,
+					  ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			// ImGui::ColorPicker4("base color", &e->renderer->mesh->sub_meshes[0].mat->color.r);
 			ImGui::Image(e->renderer->mesh->sub_meshes[0].mat->tex->id, ImVec2(50, 50));
 		}
 	}
@@ -141,6 +177,7 @@ void draw_tree_node(struct editor *editor, struct entity *entity)
 
 	while (entity) {
 		bool selected = entity == editor->selected_entity ? true : false;
+		ImGui::PushID(entity->id);
 		if (ImGui::Selectable(entity->name, selected)) {
 			editor->selected_entity = entity;
 		}
@@ -151,16 +188,17 @@ void draw_tree_node(struct editor *editor, struct entity *entity)
 			ImGui::SetCursorPosX(cursor_x);
 		}
 
+		ImGui::PopID();
 		entity = entity->next;
 	}
 }
 
 void draw_hierarchy(struct editor *editor)
 {
-	ImGui::Begin("hierarchy");
+	ImGui::Begin("Hierarchy");
 
-	for (int i = 0; i < editor->scene->num_entities; i++) {
-		struct entity *e = &editor->scene->entities[i];
+	for (int i = 0; i < editor->scene->entities.count; i++) {
+		struct entity *e = &editor->scene->entities.data[i];
 		if (!e->parent) {
 			draw_tree_node(editor, e);
 		}
@@ -171,6 +209,10 @@ void draw_hierarchy(struct editor *editor)
 			if (editor->selected_entity)
 				editor->game->entity_duplicate(editor->scene, editor->selected_entity);
 		}
+	}
+
+	if (editor->input->actions[DEL].state == STARTED && editor->selected_entity) {
+		editor->game->destroy_entity(editor->scene, editor->selected_entity);
 	}
 
 	ImGui::End();
@@ -185,19 +227,51 @@ void draw_inspector(struct editor *editor)
 	ImGui::End();
 }
 
+void update_editor_cam(struct editor *editor)
+{
+	struct input *input = editor->input;
+	struct window *win = editor->win;
+	struct scene *scene = editor->scene;
+
+	if (input->actions[M1].state == STARTED) {
+		input->lock_mouse(win->sdl_win, true);
+	} else if (input->actions[M1].state == CANCELED) {
+		input->lock_mouse(win->sdl_win, false);
+	}
+
+	if (input->actions[M1].state != CANCELED) {
+		versors current_rot = editor->editor_cam->transform->rot;
+
+		scene->pitch -= input->actions[MOUSE_DELTA].composite.y * scene->look_sens;
+		scene->yaw -= input->actions[MOUSE_DELTA].composite.x * scene->look_sens;
+
+		versors target_rot = glms_euler_zyx_quat((vec3s){ scene->pitch, scene->yaw, 0.0f });
+		editor->game->set_rotation(editor->editor_cam->transform, target_rot);
+
+		vec3s forward = editor->game->get_forward(editor->editor_cam->transform);
+		vec3s right = editor->game->get_right(editor->editor_cam->transform);
+
+		vec3s move_dir = glms_vec3_add(glms_vec3_scale(forward, input->actions[WASD].composite.y),
+					       glms_vec3_scale(right, -input->actions[WASD].composite.x));
+
+		vec3s new_pos = glms_vec3_add(editor->editor_cam->transform->pos,
+					      glms_vec3_scale(move_dir, scene->move_speed * scene->dt));
+		editor->game->set_position(editor->editor_cam->transform, new_pos);
+	}
+}
+
 void update_editor(struct editor *editor)
 {
-	// glBindFramebuffer(GL_FRAMEBUFFER, ren->final_fbo.id);
-	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
-	// glClearNamedFramebufferfv(ren->final_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
+	if (editor->mode == DEFAULT) {
+		update_editor_cam(editor);
+		editor->game->update_cameras(&editor->cameras);
+	}
 	ImGui::SetCurrentContext((ImGuiContext *)editor->imgui_ctx);
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-	// ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-	// ImGui::ShowDemoWindow(&editor->show_demo);
 	bool show = true;
 	ImGui::ShowDemoWindow(&show);
 	scene_view_draw(editor);
@@ -222,6 +296,18 @@ void process_event(SDL_Event *event)
 
 void init_editor(struct window *win, struct editor *editor)
 {
+	editor_arena = get_new_arena((size_t)1 << 30);
+	editor->next_id = 1;
+	editor->mode = DEFAULT;
+
+	editor->entities.data = alloc_struct(&editor_arena, struct entity, 4096);
+	editor->cameras.data = alloc_struct(&editor_arena, struct camera, 32);
+	editor->transforms.data = alloc_struct(&editor_arena, struct transform, 4096);
+	editor->mesh_renderers.data = alloc_struct(&editor_arena, struct mesh_renderer, 4096);
+
+	editor->editor_cam = editor->game->get_new_entity(&editor->entities, &editor->transforms, &editor->next_id);
+	editor->game->add_camera(&editor->cameras, editor->editor_cam);
+
 	editor->show_demo = true;
 	IMGUI_CHECKVERSION();
 	editor->imgui_ctx = ImGui::CreateContext();

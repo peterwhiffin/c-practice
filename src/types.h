@@ -27,6 +27,12 @@
 #define PETE_API
 #endif
 
+#define PETE_ARR_TYPE(name, type) \
+	struct name {             \
+		type *data;       \
+		size_t count;     \
+	}
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -236,26 +242,29 @@ struct entity {
 	struct entity *next;
 	struct transform *transform;
 	struct mesh_renderer *renderer;
-	struct physics_body *body;
+	struct rigidbody *body;
 	struct camera *camera;
 };
 
-enum edit_mode { DEFAULT, PLACE };
+enum edit_mode { DEFAULT, PLACE, PLAY };
+
+PETE_ARR_TYPE(entities, struct entity);
+PETE_ARR_TYPE(transforms, struct transform);
+PETE_ARR_TYPE(cameras, struct camera);
+PETE_ARR_TYPE(mesh_renderers, struct mesh_renderer);
+PETE_ARR_TYPE(rigidbodies, struct rigidbody);
 
 struct scene {
 	char filename[512];
-	struct entity *scene_cam;
+	vec3s light_direction;
+	struct physics *physics;
 	struct entity *preview_model;
-	struct transform *transforms;
-	struct mesh_renderer *renderers;
-	struct physics_body *bodies;
-	struct camera *cameras;
-	struct entity *entities;
-	size_t num_entities;
-	size_t num_transforms;
-	size_t num_renderers;
-	size_t num_cameras;
-	size_t num_bodies;
+	struct entity *first_free_entity;
+	struct entities entities;
+	struct transforms transforms;
+	struct cameras cameras;
+	struct mesh_renderers mesh_renderers;
+	struct rigidbodies rigidbodies;
 	float move_speed;
 	float move_mod;
 	float look_sens;
@@ -286,17 +295,23 @@ struct renderer;
 struct physics;
 
 struct game {
+	struct entity *player_entity;
 	float spawn_force;
 	void *lib_handle;
 	void (*load_functions)(struct game *);
+
+	void (*destroy_entity)(struct scene *scene, struct entity *entity);
 	void (*update)(struct scene *, struct input *, struct resources *, struct renderer *, struct window *,
 		       struct physics *phys, struct game *game);
 	void (*init_scene)(struct scene *, struct resources *);
+
+	void (*start_game)(struct game *game, struct scene *scene);
+	void (*update_cameras)(struct cameras *cameras);
 	void (*entity_unset_parent)(struct entity *child);
 	void (*entity_set_parent)(struct entity *child, struct entity *parent);
-	struct entity *(*get_new_entity)(struct scene *scene);
-	struct mesh_renderer *(*add_renderer)(struct scene *scene, struct entity *entity);
-	struct camera *(*add_camera)(struct scene *scene, struct entity *entity);
+	struct entity *(*get_new_entity)(struct entities *entities, struct transforms *transforms, u32 *next_id);
+	struct mesh_renderer *(*add_renderer)(struct mesh_renderers *mesh_renderers, struct entity *entity);
+	struct camera *(*add_camera)(struct cameras *cameras, struct entity *entity);
 	struct entity *(*entity_duplicate)(struct scene *, struct entity *);
 	vec3s (*get_up)(struct transform *t);
 	vec3s (*get_forward)(struct transform *t);
@@ -317,21 +332,25 @@ struct physics {
 	size_t num_tris;
 	void *lib_handle;
 	struct physics *(*load_functions)(struct physics *);
+
+	void (*physics_remove_rigidbody)(struct scene *scene, struct entity *entity);
+	struct rigidbody *(*rigidbody_get_body)(struct scene *scene, size_t index);
+	struct entity *(*rigidbody_get_entity)(struct rigidbody *body);
 	void (*physics_init)(struct physics *physics, struct scene *scene, struct arena *arena);
 	void (*step_physics)(struct physics *physics, struct scene *scene, struct game *game, float dt);
-	vec3s (*get_transformed_scale)(struct physics *phys, struct physics_body *body);
+	vec3s (*get_transformed_scale)(struct physics *phys, struct rigidbody *body);
 
-	struct physics_body *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
-					      struct BodySettings *settings);
-	struct physics_body *(*add_rigidbody_box)(struct physics *physics, struct scene *scene, struct entity *entity,
+	struct rigidbody *(*add_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
+					   struct BodySettings *settings);
+	struct rigidbody *(*add_rigidbody_box)(struct physics *physics, struct scene *scene, struct entity *entity,
+					       bool is_static);
+
+	struct rigidbody *(*add_sphere_rigidbody)(struct physics *physics, struct scene *scene, struct entity *entity,
 						  bool is_static);
 
-	struct physics_body *(*add_sphere_rigidbody)(struct physics *physics, struct scene *scene,
-						     struct entity *entity, bool is_static);
-
 	void (*rigidbody_init)(struct physics *physics, struct entity *entity);
-	void (*physics_add_force)(struct physics *physics, struct physics_body *body, vec3s force);
-	struct BodySettings (*physics_get_body_settings)(struct physics *phys, struct physics_body *body);
+	void (*physics_add_force)(struct physics *physics, struct rigidbody *body, vec3s force);
+	struct BodySettings (*physics_get_body_settings)(struct physics *phys, struct rigidbody *body);
 };
 
 struct renderer {
@@ -340,8 +359,8 @@ struct renderer {
 	void (*test_renderer)(struct renderer *, struct window *);
 	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
 	void (*window_resized)(struct renderer *, struct window *, struct arena *);
-	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *,
-			   struct physics *phys);
+	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *, struct physics *phys,
+			   struct camera *camera);
 	void (*draw_fullscreen_quad)(struct renderer *);
 	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
 	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
@@ -391,7 +410,15 @@ struct editor {
 	struct resources *res;
 	struct input *input;
 	struct entity *selected_entity;
+	struct entity *editor_cam;
+	struct transforms transforms;
+	struct entities entities;
+	struct cameras cameras;
+	struct mesh_renderers mesh_renderers;
+	enum edit_mode mode;
+	u32 next_id;
 	bool show_demo;
+	bool reload_scene;
 
 	vec2s image_size;
 	vec2s image_pos;

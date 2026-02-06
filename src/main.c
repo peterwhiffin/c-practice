@@ -149,10 +149,10 @@ int main()
 	ren->lib_handle = NULL;
 	ren->win = win;
 	ren->input = input;
-	scene->entities = alloc_struct(&main_arena, typeof(*scene->entities), 4096);
-	scene->cameras = alloc_struct(&main_arena, typeof(*scene->cameras), 32);
-	scene->transforms = alloc_struct(&main_arena, typeof(*scene->transforms), 4096);
-	scene->renderers = alloc_struct(&main_arena, typeof(*scene->renderers), 4096);
+	scene->entities.data = alloc_struct(&main_arena, typeof(*scene->entities.data), 4096);
+	scene->cameras.data = alloc_struct(&main_arena, typeof(*scene->cameras.data), 32);
+	scene->transforms.data = alloc_struct(&main_arena, typeof(*scene->transforms.data), 4096);
+	scene->mesh_renderers.data = alloc_struct(&main_arena, typeof(*scene->mesh_renderers.data), 4096);
 	editor->ren = ren;
 	editor->res = res;
 	editor->input = input;
@@ -173,6 +173,7 @@ int main()
 	game->init_scene(scene, res);
 	physics->physics_init(physics, scene, &main_arena);
 	editor->init_editor(win, editor);
+	scene->physics = physics;
 
 	scene_load(scene, physics, game, res, "test.scene");
 	update_time(scene);
@@ -183,9 +184,30 @@ int main()
 		check_input(input);
 		poll_events(win, input, ren, editor, &render_arena);
 		physics->step_physics(physics, scene, game, scene->dt);
-		game->update(scene, input, res, ren, win, physics, game);
-		ren->draw_scene(ren, res, scene, win, physics);
+
+		struct camera *cam = &editor->cameras.data[0];
+
+		if (editor->mode == PLAY) {
+			game->update(scene, input, res, ren, win, physics, game);
+			cam = &scene->cameras.data[0];
+		}
+
+		ren->draw_scene(ren, res, scene, win, physics, cam);
 		editor->update_editor(editor);
+
+		if (editor->reload_scene) {
+			size_t count = scene->entities.count;
+			for (int i = 0; i < count; i++) {
+				game->destroy_entity(scene, &scene->entities.data[i]);
+			}
+
+			scene_load(scene, physics, game, res, "test.scene");
+			editor->reload_scene = false;
+
+			if (editor->mode == PLAY) {
+				game->start_game(game, scene);
+			}
+		}
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
 

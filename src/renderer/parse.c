@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
+// #include <unistd.h>
 #include <wchar.h>
 #include "../types.h"
 #include "cglm/types-struct.h"
@@ -168,6 +168,7 @@ void write_indent(FILE *f, int level)
 	}
 }
 
+//TODO: must be a better way
 void scene_write_entity(struct scene *scene, struct physics *phys, FILE *f, struct entity *current_entity,
 			int indent_level)
 {
@@ -293,8 +294,8 @@ void scene_write(struct scene *scene, struct physics *phys)
 {
 	FILE *f = fopen("test.scene", "w");
 
-	for (int i = 0; i < scene->num_entities; i++) {
-		struct entity *e = &scene->entities[i];
+	for (int i = 0; i < scene->entities.count; i++) {
+		struct entity *e = &scene->entities.data[i];
 		if (!e->parent) {
 			scene_write_entity(scene, phys, f, e, 0);
 		}
@@ -421,7 +422,7 @@ void create_scene(struct scene *scene, struct physics *phys, struct game *game, 
 
 		switch (blocks->type) {
 		case ENTITY:
-			current_entity = game->get_new_entity(scene);
+			current_entity = game->get_new_entity(&scene->entities, &scene->transforms, &scene->next_id);
 			game->entity_set_parent(current_entity, parent_entity);
 
 			while (current_pair) {
@@ -472,7 +473,7 @@ void create_scene(struct scene *scene, struct physics *phys, struct game *game, 
 			}
 			break;
 		case CAMERA:
-			game->add_camera(scene, current_entity);
+			game->add_camera(&scene->cameras, current_entity);
 			while (current_pair) {
 				if (!strcmp(current_pair->field->data, CAMERA_FOV)) {
 					current_entity->camera->fov = strtof(current_pair->value->data, NULL);
@@ -486,7 +487,7 @@ void create_scene(struct scene *scene, struct physics *phys, struct game *game, 
 
 			break;
 		case MESH_RENDERER:
-			game->add_renderer(scene, current_entity);
+			game->add_renderer(&scene->mesh_renderers, current_entity);
 			while (current_pair) {
 				if (!strcmp(current_pair->field->data, MESH_RENDERER_MESH)) {
 					current_entity->renderer->mesh = find_mesh(res, current_pair->value->data);
@@ -535,8 +536,6 @@ void create_scene(struct scene *scene, struct physics *phys, struct game *game, 
 			}
 
 			phys->add_rigidbody(phys, scene, current_entity, &settings);
-			// phys->add_rigidbody_settings(phys, scene, current_entity);
-
 			break;
 		}
 		}
@@ -552,8 +551,8 @@ void create_scene(struct scene *scene, struct physics *phys, struct game *game, 
 
 void init_entities(struct scene *scene, struct physics *phys)
 {
-	for (int i = 0; i < scene->num_entities; i++) {
-		struct entity *e = &scene->entities[i];
+	for (int i = 0; i < scene->entities.count; i++) {
+		struct entity *e = &scene->entities.data[i];
 		if (e->body) {
 			phys->rigidbody_init(phys, e);
 		}

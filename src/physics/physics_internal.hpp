@@ -44,7 +44,7 @@ const JPH::uint cMaxContactConstraints = 10240;
 const JPH::uint cCollisionSteps = 1;
 constexpr double cDeltaTime = 1.0 / 60.0;
 
-struct physics_body {
+struct rigidbody {
 	struct entity *entity;
 	struct BodySettings settings;
 	class JPH::BodyID jolt_body;

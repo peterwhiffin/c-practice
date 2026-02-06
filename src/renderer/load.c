@@ -410,40 +410,34 @@ void create_mesh(struct resources *res, struct renderer *ren, struct mesh *mesh,
 
 		for (size_t face_ix = 0; face_ix < mesh_part->num_faces; face_ix++) {
 			ufbx_face face = node_mesh->faces.data[mesh_part->face_indices.data[face_ix]];
-
 			u32 num_tris = ufbx_triangulate_face(tri_indices, num_tri_indices, node_mesh, face);
-
 			for (size_t l = 0; l < num_tris * 3; l++) {
 				u32 index = tri_indices[l];
-
 				struct vertex *v = &vertices[num_vertices++];
 				ufbx_vec3 pos = ufbx_get_vertex_vec3(&node_mesh->vertex_position, index);
 				ufbx_vec3 normal = ufbx_get_vertex_vec3(&node_mesh->vertex_normal, index);
 				ufbx_vec2 uv = ufbx_get_vertex_vec2(&node_mesh->vertex_uv, index);
-				// v->pos.x = pos.x * scale;
-				// v->pos.y = pos.y * scale;
-				// v->pos.z = pos.z * scale;
 
-				v->pos.x = pos.x;
-				v->pos.y = pos.y;
-				v->pos.z = pos.z;
-				vec4s vert = (vec4s){ v->pos.x, v->pos.y, v->pos.z, 1.0f };
+				vec4s vert = (vec4s){ pos.x, pos.y, pos.z, 1.0f };
 				mat4x3s mat43 = glms_mat4x3_make((float *)&node->node_to_world.m00);
 				vec3s vert2 = glms_mat4x3_mulv(mat43, vert);
 				v->pos.x = vert2.x;
 				v->pos.y = vert2.y;
 				v->pos.z = vert2.z;
 
-				v->normal.x = normal.x;
-				v->normal.y = normal.y;
-				v->normal.z = normal.z;
+				vec4s norm4 = (vec4s){ normal.x, normal.y, normal.z, 0.0f };
+				vec3s transformed_normal = glms_mat4x3_mulv(mat43, norm4);
+				transformed_normal = glms_vec3_normalize(transformed_normal);
+				v->normal.x = transformed_normal.x;
+				v->normal.y = transformed_normal.y;
+				v->normal.z = transformed_normal.z;
+
 				v->uv.x = uv.x;
 				v->uv.y = uv.y;
 				mesh->max = glms_vec3_maxv(mesh->max, v->pos);
 				mesh->min = glms_vec3_minv(mesh->min, v->pos);
 			}
 		}
-
 		// assert(num_vertices == num_triangles * 3);
 
 		ufbx_vertex_stream streams[1] = {
@@ -679,9 +673,9 @@ void load_resources(struct resources *res, struct renderer *ren, struct arena *a
 		}
 		model->num_meshes = num_added;
 
-		for (int i = current_num; i < new_num; i++) {
-			model->meshes[i] = &res->meshes[i];
-		}
+		// for (int i = current_num; i < new_num; i++) {
+		// 	model->meshes[i] = &res->meshes[i];
+		// }
 
 		for (int i = 0; i < num_added; i++) {
 			model->meshes[i] = &res->meshes[current_num + i];

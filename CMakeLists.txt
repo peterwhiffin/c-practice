@@ -12,4 +12,4 @@ target_include_directories(dummy PRIVATE
     "${CMAKE_SOURCE_DIR}/../JoltPhysics-5.3.0"
 )
 
-target_compile_definitions(dummy PRIVATE HOT)
+target_compile_definitions(dummy PRIVATE HOT PETE_EDITOR)

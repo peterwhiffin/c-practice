@@ -21,7 +21,8 @@ vec3s vec3_normalize(vec3s v)
 	v.z = v.z / mag;
 	return v;
 }
-vec3s quat_by_vec3(versors rotation, vec3s point)
+
+vec3s vec3_rotate(versors rotation, vec3s point)
 {
 	vec3s vector;
 	float num = rotation.x * 2.0f;
@@ -71,20 +72,17 @@ static void update_transform_matrices(struct transform *transform)
 
 vec3s get_right(struct transform *t)
 {
-	return glms_vec3_normalize(quat_by_vec3(t->rot, (vec3s){ 1.0f, 0.0f, 0.0f }));
-	// return glms_vec3_normalize(glms_quat_rotatev(glms_quat_normalize(t->rot), (vec3s){ 1.0f, 0.0f, 0.0f }));
+	return (vec3s){ t->world_transform.col[0].x, t->world_transform.col[0].y, t->world_transform.col[0].z };
 }
 
 vec3s get_up(struct transform *t)
 {
-	return glms_vec3_normalize(quat_by_vec3(t->rot, (vec3s){ 0.0f, 1.0f, 0.0f }));
-	// return glms_vec3_normalize(glms_quat_rotatev(glms_quat_normalize(t->rot), (vec3s){ 0.0f, 1.0f, 0.0f }));
+	return (vec3s){ t->world_transform.col[1].x, t->world_transform.col[1].y, t->world_transform.col[1].z };
 }
 
 vec3s get_forward(struct transform *t)
 {
-	return glms_vec3_normalize(quat_by_vec3(t->rot, (vec3s){ 0.0f, 0.0f, 1.0f }));
-	// return glms_vec3_normalize(glms_quat_rotatev(glms_quat_normalize(t->rot), (vec3s){ 0.0f, 0.0f, 1.0f }));
+	return (vec3s){ t->world_transform.col[2].x, t->world_transform.col[2].y, t->world_transform.col[2].z };
 }
 
 void set_position(struct transform *t, vec3s pos)

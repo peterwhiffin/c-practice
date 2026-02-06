@@ -4,7 +4,7 @@
 
 #ifndef PHYSICS_INTERNAL
 typedef struct physics_world physics_world;
-typedef struct physics_body physics_body;
+typedef struct rigidbody rigidbody;
 #endif
 
 enum body_shape { BOX, SPHERE, CYLINDER, CAPSULE };

@@ -38,7 +38,8 @@ struct notify {
 	int resource_watch;
 	int editor_watch;
 	char buffer[BUF_LEN];
-	enum reload_flags flags;
+	// enum reload_flags flags;
+	u32 flags;
 	u32 num_reloads;
 };
 

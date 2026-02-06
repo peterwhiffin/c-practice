@@ -15,13 +15,16 @@ layout(location = 24) uniform float normal_expansion;
 layout(location = 4) out vec2 texCoord;
 layout(location = 8) out vec3 normal;
 
+layout(location = 25) out vec3 fragPos;
+
 void main() {
         texCoord = aTexCoord;
         mat3 normalMat = transpose(inverse(mat3(model)));
-
+        normal = normalize(normalMat * aNormal);
+        fragPos = (model * vec4(aPos, 1.0)).xyz;
         vec3 temp_pos = aPos;
         vec3 finalPos = vec3(model * vec4(temp_pos, 1.0));
-        normal = normalize(normalMat * aNormal);
 
-        gl_Position = viewProj * vec4(finalPos + normal * normal_expansion, 1.0);
+        // gl_Position = viewProj * vec4(finalPos + normal * normal_expansion, 1.0);
+        gl_Position = viewProj * model * vec4(aPos, 1.0);
 }
