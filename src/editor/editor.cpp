@@ -71,10 +71,18 @@ void debug_draw(struct editor *editor)
 		editor->ren->scene_write(editor->scene, editor->physics);
 	}
 
+	if (ImGui::Button("Reload Shaders", ImVec2(150, 80))) {
+		editor->ren->reload_shaders(editor->ren);
+	}
+
 	ImGui::DragFloat("spawn velocity", &editor->game->spawn_force);
 
 	if (ImGui::Checkbox("draw physics bodies", &editor->physics->draw_debug)) {
 	}
+
+	if (ImGui::Checkbox("SDF Renderer", &editor->ren->sdf_renderer)) {
+	}
+
 	ImGui::End();
 }
 
@@ -150,6 +158,9 @@ void inspector_draw_entity(struct editor *editor, struct entity *e)
 				}
 
 				ImGui::EndCombo();
+			}
+
+			if (ImGui::Checkbox("is light", &e->renderer->is_lighting)) {
 			}
 		}
 

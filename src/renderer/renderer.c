@@ -159,13 +159,68 @@ void draw_fullscreen_quad(struct renderer *ren)
 	vec2s res = (vec2s){ 800, 600 };
 	glUniform2fv(13, 1, &res.x);
 	glUniform2fv(14, 1, &ren->input->relativeCursorPosition.x);
-	glBindTextureUnit(0, ren->main_fbo.targets.id);
+	// glBindTextureUnit(0, ren->main_fbo.targets.id);
+	glBindTextureUnit(0, ren->light_fbo.targets.id);
 	glBindVertexArray(ren->quad_vao);
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glClearNamedFramebufferfv(0, GL_COLOR, 0, &ren->clear_color[0]);
 	glClearNamedFramebufferfv(0, GL_DEPTH, 0, &ren->clear_depth);
+}
+
+void draw_lighting(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win,
+		   struct physics *phys, struct camera *cam)
+{
+	glViewport(0, 0, ren->main_fbo.width, ren->main_fbo.height);
+
+	const GLint clear_stencil = 0xFF;
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, ren->light_fbo.id);
+
+	float color[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
+	glClearNamedFramebufferfv(ren->light_fbo.id, GL_COLOR, 0, &color[0]);
+	// glClearNamedFramebufferfv(ren->light_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
+
+	glUseProgram(ren->fullscreen_shader);
+	glDisable(GL_DEPTH_TEST);
+	glBindTextureUnit(0, ren->main_fbo.targets.id);
+	glBindVertexArray(ren->quad_vao);
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
+	glEnable(GL_DEPTH_TEST);
+
+	for (int i = 0; i < scene->mesh_renderers.count; i++) {
+		struct mesh_renderer *mr = &scene->mesh_renderers.data[i];
+		if (!mr->is_lighting)
+			continue;
+
+		glUseProgram(ren->light_shader);
+
+		vec3s light_dir = scene->light_direction;
+		glUniform3fv(11, 1, &light_dir.x);
+		glUniformMatrix4fv(9, 1, GL_FALSE, &cam->viewProj.m00);
+		glUniformMatrix4fv(13, 1, GL_FALSE, &mr->entity->transform->world_transform.m00);
+		glUniform1f(12, ren->light_active);
+		glUniform1f(23, scene->time);
+
+		for (int i = 0; i < mr->mesh->num_sub_meshes; i++) {
+			struct sub_mesh *sm = &mr->mesh->sub_meshes[i];
+
+			// glBindTextureUnit(0, sm->mat->tex->id);
+			glBindTextureUnit(0, ren->main_fbo.targets.id);
+
+			glUniform4fv(10, 1, &sm->mat->color.r);
+			glBindVertexArray(sm->vao);
+			glDrawElements(GL_TRIANGLES, sm->ind_count, GL_UNSIGNED_INT, (void *)sm->ind_offset);
+		}
+	}
+
+	// glDisable(GL_DEPTH_TEST);
+	// glDepthFunc(GL_GREATER);
+
+	// glClearNamedFramebufferfv(ren->light_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
 }
 
 void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win,
@@ -213,7 +268,8 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 
 	for (int i = 0; i < scene->mesh_renderers.count; i++) {
 		struct mesh_renderer *mr = &scene->mesh_renderers.data[i];
-
+		if (mr->is_lighting)
+			continue;
 		// vec3s scale = mr->entity->transform->scale;
 		// vec3s up_scale = glms_vec3_scale(scale, 1.01f);
 		glUseProgram(ren->default_shader);
@@ -293,6 +349,7 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	//
 	// glDisable(GL_SCISSOR_TEST);
 
+	draw_lighting(ren, res, scene, win, phys, cam);
 	draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
 	draw_fullscreen_quad(ren);
 
@@ -301,6 +358,39 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	// 	// Process/log the error, e.g., print the error code.
 	// 	// fprintf(stderr, "OpenGL Error load func: %d\n", error);
 	// }
+}
+
+void draw_sdf(struct renderer *ren, struct camera *cam, struct scene *scene)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, ren->light_fbo.id);
+	glClearNamedFramebufferfv(ren->light_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
+	glClearNamedFramebufferfv(ren->light_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
+
+	glUseProgram(ren->sdf_shader);
+	mat4s inv_view_proj = glms_mat4_inv(cam->viewProj);
+	float res[2] = { 800.0f, 600.0f };
+
+	glUniform2fv(5, 1, &res[0]);
+	glUniformMatrix4fv(6, 1, GL_FALSE, &inv_view_proj.m00);
+	vec3s light_dir = scene->light_direction;
+	glUniform3fv(7, 1, &light_dir.x);
+	glUniform1f(8, scene->time);
+	//
+
+	glBindVertexArray(ren->quad_vao);
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
+
+	draw_fullscreen_quad(ren);
+}
+
+void draw(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win, struct physics *phys,
+	  struct camera *cam)
+{
+	if (ren->sdf_renderer) {
+		draw_sdf(ren, cam, scene);
+	} else {
+		draw_scene(ren, res, scene, win, phys, cam);
+	}
 }
 
 void create_framebuffer(struct renderer *ren, struct framebuffer *fb)
@@ -321,6 +411,31 @@ void create_framebuffer(struct renderer *ren, struct framebuffer *fb)
 
 	glNamedFramebufferDrawBuffers(fb->id, fb->num_targets, attachments);
 	glNamedFramebufferRenderbuffer(fb->id, fb->rb.attachment, GL_RENDERBUFFER, fb->rb.id);
+
+	if (glCheckNamedFramebufferStatus(fb->id, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		printf("ERROR::CREATE_FRAMEBUFFER::Framebuffer not complete");
+	}
+}
+
+void create_special_framebuffer(struct renderer *ren, struct framebuffer *fb)
+{
+	GLenum attachments[8];
+	glCreateFramebuffers(1, &fb->id);
+
+	// glCreateRenderbuffers(1, &fb->rb.id);
+	// glNamedRenderbufferStorage(fb->rb.id, fb->rb.internal_format, fb->width, fb->height);
+
+	for (int i = 0; i < fb->num_targets; i++) {
+		GLenum attachment = GL_COLOR_ATTACHMENT0 + i;
+		attachments[i] = attachment;
+		fb->targets.attachment = attachment;
+		create_texture(&fb->targets, NULL);
+		glNamedFramebufferTexture(fb->id, attachment, fb->targets.id, 0);
+	}
+
+	glNamedFramebufferDrawBuffers(fb->id, fb->num_targets, attachments);
+	// glNamedFramebufferRenderbuffer(fb->id, ren->main_fbo.rb.attachment, GL_RENDERBUFFER, fb->rb.id);
+	glNamedFramebufferRenderbuffer(fb->id, ren->main_fbo.rb.attachment, GL_RENDERBUFFER, ren->main_fbo.rb.id);
 
 	if (glCheckNamedFramebufferStatus(fb->id, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		printf("ERROR::CREATE_FRAMEBUFFER::Framebuffer not complete");
@@ -383,8 +498,24 @@ void init_renderer(struct renderer *ren, struct arena *arena, struct window *win
 	tex->filter_type = GL_NEAREST;
 	tex->wrap_type = GL_CLAMP_TO_EDGE;
 
+	ren->light_fbo.width = 800;
+	ren->light_fbo.height = 600;
+	ren->light_fbo.rb.attachment = GL_DEPTH_ATTACHMENT;
+	ren->light_fbo.rb.internal_format = GL_DEPTH_COMPONENT16;
+	ren->light_fbo.num_targets = 1;
+
+	tex = &ren->light_fbo.targets;
+	tex->format = GL_RGBA;
+	tex->internal_format = GL_RGBA8;
+	tex->width = ren->light_fbo.width;
+	tex->height = ren->light_fbo.height;
+	tex->mips = false;
+	tex->filter_type = GL_NEAREST;
+	tex->wrap_type = GL_CLAMP_TO_EDGE;
+
 	create_framebuffer(ren, &ren->main_fbo);
 	create_framebuffer(ren, &ren->final_fbo);
+	create_special_framebuffer(ren, &ren->light_fbo);
 
 	glUseProgram(ren->text_shader);
 	glUniformMatrix4fv(4, 1, GL_FALSE, &ren->text_proj.m00);
@@ -458,6 +589,7 @@ PETE_API void load_renderer_functions(struct renderer *ren, GLADloadproc load)
 	ren->scene_write = scene_write;
 	ren->window_resized = window_resized;
 	ren->draw_scene = draw_scene;
+	ren->draw = draw;
 	ren->draw_fullscreen_quad = draw_fullscreen_quad;
 	ren->reload_model = reload_model;
 	gladLoadGLLoader(load);

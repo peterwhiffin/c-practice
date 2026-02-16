@@ -172,6 +172,7 @@ struct model_import {
 struct mesh_renderer {
 	struct entity *entity;
 	struct mesh *mesh;
+	bool is_lighting;
 };
 
 struct mesh_info {
@@ -359,6 +360,9 @@ struct renderer {
 	void (*test_renderer)(struct renderer *, struct window *);
 	void (*reload_renderer)(struct renderer *, struct resources *, struct arena *, struct window *);
 	void (*window_resized)(struct renderer *, struct window *, struct arena *);
+
+	void (*draw)(struct renderer *, struct resources *, struct scene *, struct window *, struct physics *phys,
+		     struct camera *camera);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *, struct physics *phys,
 			   struct camera *camera);
 	void (*draw_fullscreen_quad)(struct renderer *);
@@ -370,6 +374,7 @@ struct renderer {
 	void (*render_debug)(struct renderer *renderer, struct DebugLine *lines, struct DebugTri *tris,
 			     size_t num_lines, size_t num_tris);
 
+	bool sdf_renderer;
 	struct input *input;
 	float clear_color[4];
 	float clear_depth;
@@ -378,10 +383,12 @@ struct renderer {
 	struct window *win;
 	GLuint default_shader;
 	GLuint debug_shader;
+	GLuint sdf_shader;
 	GLuint fullscreen_shader;
 	GLuint text_shader;
 	GLuint gui_shader;
 	GLuint skybox_shader;
+	GLuint light_shader;
 	GLuint quad_vao;
 	GLuint quad_vbo;
 	GLuint quad_ebo;
@@ -393,6 +400,7 @@ struct renderer {
 	GLuint skybox_vbo;
 	struct texture_list tex_list;
 	struct framebuffer main_fbo;
+	struct framebuffer light_fbo;
 	struct framebuffer final_fbo;
 	struct texture *skybox_tex;
 	struct texture *skybox_night_tex;

@@ -47,6 +47,10 @@ constexpr double cDeltaTime = 1.0 / 60.0;
 struct rigidbody {
 	struct entity *entity;
 	struct BodySettings settings;
+	JPH::Vec3 prev_pos;
+	JPH::Vec3 current_pos;
+	JPH::Quat prev_rot;
+	JPH::Quat current_rot;
 	class JPH::BodyID jolt_body;
 };
 

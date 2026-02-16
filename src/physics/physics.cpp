@@ -3,6 +3,7 @@
 #include "../types.h"
 
 #include "cglm/types-struct.h"
+#include "cglm/types.h"
 #include "physics_internal.hpp"
 #include <cstdarg>
 #include <cstddef>
@@ -23,7 +24,49 @@ using namespace std;
 
 #define TIME_STEP 1.0f / 60.0f
 
-void step_physics(struct physics *physics, struct scene *scene, struct game *game, float delta_time)
+Vec3 vec3_lerp(Vec3 a, Vec3 b, float t)
+{
+	return a + (b - a) * t;
+}
+
+void physics_lerp_transforms(struct physics *phys, struct scene *scene, struct game *game)
+{
+	BodyInterface *bi = phys->physics_world->bodyInterface;
+	float t = phys->time_accum / TIME_STEP;
+
+	for (int i = 0; i < scene->rigidbodies.count; i++) {
+		struct rigidbody *rb = &scene->rigidbodies.data[i];
+		struct transform *transform = rb->entity->transform;
+
+		Vec3 new_pos = vec3_lerp(rb->prev_pos, rb->current_pos, t);
+		Quat new_rot = rb->prev_rot.SLERP(rb->current_rot, t);
+
+		game->set_position(transform, { new_pos.GetX(), new_pos.GetY(), new_pos.GetZ() });
+		game->set_rotation(transform, { new_rot.GetX(), new_rot.GetY(), new_rot.GetZ(), new_rot.GetW() });
+	}
+}
+
+void physics_cache_positions(struct physics *phys, struct scene *scene, struct game *game)
+{
+	BodyInterface *bi = phys->physics_world->bodyInterface;
+
+	for (int i = 0; i < scene->rigidbodies.count; i++) {
+		struct rigidbody *rb = &scene->rigidbodies.data[i];
+		struct transform *t = rb->entity->transform;
+
+		game->set_position(t, { rb->current_pos.GetX(), rb->current_pos.GetY(), rb->current_pos.GetZ() });
+		game->set_rotation(t, { rb->current_rot.GetX(), rb->current_rot.GetY(), rb->current_rot.GetZ(),
+					rb->current_rot.GetW() });
+
+		rb->prev_pos = rb->current_pos;
+		rb->prev_rot = rb->current_rot;
+
+		rb->current_pos = bi->GetPosition(rb->jolt_body);
+		rb->current_rot = bi->GetRotation(rb->jolt_body);
+	}
+}
+
+void physics_update(struct physics *physics, struct scene *scene, struct game *game, float delta_time)
 {
 	physics->time_accum += delta_time;
 
@@ -34,16 +77,9 @@ void step_physics(struct physics *physics, struct scene *scene, struct game *gam
 							      physics->physics_world->tempAllocator,
 							      physics->physics_world->jobSystem);
 
-		for (int i = 0; i < scene->rigidbodies.count; i++) {
-			BodyInterface *bi = physics->physics_world->bodyInterface;
-			struct rigidbody *body = &scene->rigidbodies.data[i];
-			Vec3 new_pos = bi->GetPosition(body->jolt_body);
-			Quat new_rot = bi->GetRotation(body->jolt_body);
-			game->set_position(body->entity->transform, { new_pos.GetX(), new_pos.GetY(), new_pos.GetZ() });
-
-			game->set_rotation(body->entity->transform,
-					   { new_rot.GetX(), new_rot.GetY(), new_rot.GetZ(), new_rot.GetW() });
-		}
+		physics_cache_positions(physics, scene, game);
+	} else {
+		physics_lerp_transforms(physics, scene, game);
 	}
 
 	physics->physics_world->debug_renderer->lines.clear();
@@ -455,7 +491,7 @@ void physics_remove_rigidbody(struct scene *scene, struct entity *entity)
 
 extern "C" PETE_API void load_physics_functions(struct physics *physics)
 {
-	physics->step_physics = step_physics;
+	physics->step_physics = physics_update;
 	physics->physics_init = physics_init;
 	physics->add_rigidbody = add_rigidbody;
 	physics->add_rigidbody_box = add_rigidbody_box;

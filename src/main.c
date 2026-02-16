@@ -192,7 +192,8 @@ int main()
 			cam = &scene->cameras.data[0];
 		}
 
-		ren->draw_scene(ren, res, scene, win, physics, cam);
+		// ren->draw_scene(ren, res, scene, win, physics, cam);
+		ren->draw(ren, res, scene, win, physics, cam);
 		editor->update_editor(editor);
 
 		if (editor->reload_scene) {
@@ -208,6 +209,7 @@ int main()
 				game->start_game(game, scene);
 			}
 		}
+
 		SDL_GL_SwapWindow(win->sdl_win);
 	}
 

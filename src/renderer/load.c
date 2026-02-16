@@ -139,11 +139,13 @@ GLuint load_shader(const char *vertFile, const char *fragFile)
 void load_shaders(struct renderer *ren)
 {
 	ren->default_shader = load_shader("default.vert", "default.frag");
+	ren->light_shader = load_shader("default_light.vert", "default_light.frag");
 	ren->text_shader = load_shader("text.vert", "text.frag");
 	ren->fullscreen_shader = load_shader("fullscreen.vert", "fullscreen.frag");
 	ren->gui_shader = load_shader("gui.vert", "gui.frag");
 	ren->skybox_shader = load_shader("skybox.vert", "skybox.frag");
 	ren->debug_shader = load_shader("debug.vert", "debug.frag");
+	ren->sdf_shader = load_shader("fullscreen.vert", "sdf.frag");
 }
 
 void reload_shaders(struct renderer *ren)
@@ -154,6 +156,7 @@ void reload_shaders(struct renderer *ren)
 	glDeleteProgram(ren->fullscreen_shader);
 	glDeleteProgram(ren->gui_shader);
 	glDeleteProgram(ren->skybox_shader);
+	glDeleteProgram(ren->light_shader);
 	load_shaders(ren);
 }
 
