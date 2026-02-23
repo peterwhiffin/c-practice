@@ -365,7 +365,7 @@ struct renderer {
 		     struct camera *camera);
 	void (*draw_scene)(struct renderer *, struct resources *, struct scene *, struct window *, struct physics *phys,
 			   struct camera *camera);
-	void (*draw_fullscreen_quad)(struct renderer *);
+	void (*draw_fullscreen_quad)(struct renderer *, GLuint tex);
 	void (*init_renderer)(struct renderer *, struct arena *, struct window *);
 	void (*load_resources)(struct resources *, struct renderer *, struct arena *);
 	void (*scene_write)(struct scene *scene, struct physics *phys);

@@ -147,7 +147,7 @@ void render_debug(struct renderer *renderer, struct camera *cam, struct DebugLin
 	free(tri_verts);
 }
 
-void draw_fullscreen_quad(struct renderer *ren)
+void draw_fullscreen_quad(struct renderer *ren, GLuint tex)
 {
 	// glViewport(0, 0, ren->win->size.x, ren->win->size.y);
 	glViewport(0, 0, ren->final_fbo.width, ren->final_fbo.height);
@@ -159,8 +159,8 @@ void draw_fullscreen_quad(struct renderer *ren)
 	vec2s res = (vec2s){ 800, 600 };
 	glUniform2fv(13, 1, &res.x);
 	glUniform2fv(14, 1, &ren->input->relativeCursorPosition.x);
-	// glBindTextureUnit(0, ren->main_fbo.targets.id);
-	glBindTextureUnit(0, ren->light_fbo.targets.id);
+	glBindTextureUnit(0, tex);
+	// glBindTextureUnit(0, ren->light_fbo.targets.id);
 	glBindVertexArray(ren->quad_vao);
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
 
@@ -349,9 +349,9 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	//
 	// glDisable(GL_SCISSOR_TEST);
 
-	draw_lighting(ren, res, scene, win, phys, cam);
+	// draw_lighting(ren, res, scene, win, phys, cam);
 	draw_text(ren, res, fps_text, strlen(fps_text), 25, 25, 1.0f);
-	draw_fullscreen_quad(ren);
+	// draw_fullscreen_quad(ren);
 
 	// GLenum error;
 	// while ((error = glGetError()) != GL_NO_ERROR) {
@@ -360,17 +360,18 @@ void draw_scene(struct renderer *ren, struct resources *res, struct scene *scene
 	// }
 }
 
-void draw_sdf(struct renderer *ren, struct camera *cam, struct scene *scene)
+void draw_sdf(struct renderer *ren, struct resources *res, struct camera *cam, struct scene *scene)
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, ren->light_fbo.id);
 	glClearNamedFramebufferfv(ren->light_fbo.id, GL_COLOR, 0, &ren->clear_color[0]);
-	glClearNamedFramebufferfv(ren->light_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
+	// glClearNamedFramebufferfv(ren->light_fbo.id, GL_DEPTH, 0, &ren->clear_depth);
 
 	glUseProgram(ren->sdf_shader);
 	mat4s inv_view_proj = glms_mat4_inv(cam->viewProj);
-	float res[2] = { 800.0f, 600.0f };
+	float resolution[2] = { 800.0f, 600.0f };
 
-	glUniform2fv(5, 1, &res[0]);
+	glBindTextureUnit(0, ren->main_fbo.targets.id);
+	glUniform2fv(5, 1, &resolution[0]);
 	glUniformMatrix4fv(6, 1, GL_FALSE, &inv_view_proj.m00);
 	vec3s light_dir = scene->light_direction;
 	glUniform3fv(7, 1, &light_dir.x);
@@ -380,16 +381,19 @@ void draw_sdf(struct renderer *ren, struct camera *cam, struct scene *scene)
 	glBindVertexArray(ren->quad_vao);
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, (void *)0);
 
-	draw_fullscreen_quad(ren);
+	// draw_fullscreen_quad(ren);
 }
 
 void draw(struct renderer *ren, struct resources *res, struct scene *scene, struct window *win, struct physics *phys,
 	  struct camera *cam)
 {
 	if (ren->sdf_renderer) {
-		draw_sdf(ren, cam, scene);
+		draw_scene(ren, res, scene, win, phys, cam);
+		draw_sdf(ren, res, cam, scene);
+		draw_fullscreen_quad(ren, ren->light_fbo.id);
 	} else {
 		draw_scene(ren, res, scene, win, phys, cam);
+		draw_fullscreen_quad(ren, ren->main_fbo.id);
 	}
 }
 

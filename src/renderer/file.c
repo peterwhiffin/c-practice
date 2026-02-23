@@ -13,7 +13,7 @@
 const char *read_file(char *filename)
 {
 	long len;
-	FILE *f = fopen(filename, "r");
+	FILE *f = fopen(filename, "rb");
 	char *str;
 	fseek(f, 0, SEEK_END);
 	len = ftell(f);
